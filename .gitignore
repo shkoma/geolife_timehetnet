@@ -1,0 +1,8 @@
+*.plt
+*.csv
+*.npy
+*.pyc
+*.pptx
+*.pth
+*.pdf
+*.txt
