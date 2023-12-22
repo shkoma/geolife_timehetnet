@@ -23,6 +23,7 @@ def getSequential(dims=[32, 32, 1], name=None, activation=None, begin = True, mi
             final_list.append(My_Linear(in_features=dims[idx-1], out_features=1, name=f"{name} - {idx}"))
         else:
             if begin and idx == 0:
+                # begine 의 input shape 변경이 필요할 듯
                 final_list.append(My_Linear(1, dims[idx], name=f"{name}-{idx}"))
             elif middle and idx == 0:
                 final_list.append(My_Linear(33, dims[idx], name=f"{name}-{idx}"))
@@ -68,7 +69,7 @@ class HetNet(nn.Module):
         self.dense_ug = getSequential(dims=dims, activation=acti, begin = False, final=False, name='ux_dense_g')
         
         # Vbar network
-        self.dense_v = getSequential(dims=dims, activation=acti, final=False, name='vb_dense_v')
+        self.dense_v = getSequential(dims=dims, activation=acti, begin = True, final=False, name='vb_dense_v')
         self.dense_c = getSequential(dims=dims, activation=acti, begin = False, final=False, name='vb_dense_c')
         
         self.drop_layer1 = nn.Dropout(drop1)

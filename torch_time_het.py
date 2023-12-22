@@ -139,7 +139,7 @@ class GruBlock(nn.Module):
     def forward(self, inp):
         # input is TASKS x SAMPLES x TIME x FEATURES
         shape = torch._shape_as_tensor(inp)
-        # (3, 20, 5, 100, 1)
+        # (3, 20, 6, 100, 1)
         x = torch.reshape(inp, [-1, shape[-2], shape[-1]])
         # (300, 100, 1)
         x, f = self.gru(x)
@@ -151,9 +151,9 @@ class GruBlock(nn.Module):
             out = torch.reshape(f, new_shape)
         else:
             new_shape = shape[:-1].tolist() + [-1]
-            # (3, 20, 5, 100, -1)
+            # (3, 20, 6, 100, -1)
             out = torch.reshape(x, new_shape)
-            # (3, 20, 5, 100, 32)
+            # (3, 20, 6, 100, 32)
         return out
 
 
@@ -164,7 +164,7 @@ def getSequential(dims=[32, 32, 1], name=None, activation=None, begin = True, mi
         if final and idx == (len(dims) - 1):
             final_list.append(My_Linear(in_features=dims[idx-1], out_features=1, name=f"{name} - {idx}"))
         else:
-            if begin and idx == 0:
+            if begin and idx == 0: # begin 의 input_shape 변경이 필요할 듯
                 final_list.append(My_Linear(1, dims[idx], name=f"{name}-{idx}"))
             elif middle and idx == 0:
                 final_list.append(My_Linear(33, dims[idx], name=f"{name}-{idx}"))
@@ -275,27 +275,29 @@ class TimeHetNet(nn.Module):
                                     dims=dims_inf,
                                     activation=activation,
                                     final=False,
-                                    name="vb_time_v",
-                                    input_shape=(time, 1),
+                                    name="vb_time_v, fv_bar",
+                                    input_shape=(time, 1), # input_shape 의 1 수정이 필요할 듯?
                                     batchnorm=batchnorm)
         self.time_c  = getTimeBlock(block=block[0],
                                     dims=dims_inf,
                                     activation=activation,
                                     final=False,
-                                    name="vb_time_c", 
+                                    name="vb_time_c, gv_bar", 
                                     input_shape=(time, dims_inf[-1]),
                                     batchnorm=batchnorm)
 
         self.dense_v  = getSequential(dims=dims_inf,
                                       activation=activation,
+                                      begin=True,
+                                      middle=False,
                                       final=False,
-                                      name="vb_dense_v")
+                                      name="vb_dense_v, fc_bar")
         self.dense_c  = getSequential(dims=dims_inf,
                                       activation=activation,
                                       begin=False,
                                       middle=False,
                                       final=False,
-                                      name="vb_dense_c")
+                                      name="vb_dense_c, gc_bar")
     
     # input should be [Metabatch x samples X Time X features] and 
     #                 [Metabatch samples X labels]
@@ -315,69 +317,77 @@ class TimeHetNet(nn.Module):
         zero_count = torch.unsqueeze(zero_count, -1)
         zero_count = torch.unsqueeze(zero_count, -1)
         
+        # sup_x: (3, 20, 100, 6)
+        
         ##### Vbar network #####
         # Encode sup_x MxNxTxF to MxFxTxK (DS over Instances)
         vs_bar = torch.transpose(sup_x, 3, 2).contiguous()
-        # (3, 20, 6, 100)
+        # vs_bar: (3, 20, 6, 100)
         vs_bar = torch.unsqueeze(vs_bar, -1)
-        # (3, 20, 6, 100, 1)
-        vs_bar = self.time_v(vs_bar)
-        # (3, 20, 6, 100, 32)
+        # vs_bar: (3, 20, 6, 100, 1)
+        vs_bar = self.time_v(vs_bar) # gru (fv bar)
+        # vs_bar: (3, 20, 6, 100, 32)
         
         vs_bar = torch.mean(vs_bar, axis=1)
         # (3, 6, 100, 32)
-        vs_bar = self.time_c(vs_bar)
+        vs_bar = self.time_c(vs_bar) # conv (gv bar)
         vs_bar = torch.transpose(vs_bar, 2, 1).contiguous()
-        # (3, 100, 6, 32)
+        # (3, 100, 6, 32) (batch, T, C, K)
         
-        # Encode sup_y MxNx1 to Mx1xK
+        # Encode sup_y MxNx1 to Mx1xK, T' = 1 인 상태, T'= # 일 경우, #의 y'을 예측
         cs_bar = torch.unsqueeze(sup_y, axis=-1) 
-        # cs_bar: (3, 20, 1, 1)
-        cs_bar = self.dense_v(cs_bar) 
+        # cs_bar: (3, 20, 1, 1) 
+        cs_bar = self.dense_v(cs_bar) # fc bar
         # cs_bar: (3, 20, 1, 32)
         cs_bar = torch.mean(cs_bar, axis=1) 
         # cs_bar: (3, 1, 32)
-        cs_bar = self.dense_c(cs_bar) 
-        # cs_bar: (3, 1, 32)
+        cs_bar = self.dense_c(cs_bar) # gc bar
+        # cs_bar: (3, 1, 32) (batch, T', K)
         
         ##### U network ##### (DS over Channels)
-        vs_bar = torch.tile(torch.unsqueeze(vs_bar, axis=1),[1,N,1,1,1]) # MxNxTxFxK 
-        # vs_bar:(3, 20, 100, 6, 32)
+        vs_bar = torch.tile(torch.unsqueeze(vs_bar, axis=1),[1,N,1,1,1]) # M,N,T,F,K 
+        # vs_bar: (3, 20, 100, 6, 32)
         sup_x_1 = torch.unsqueeze(sup_x, axis=-1) 
-        # vs_bar:(3, 20, 100, 6, 1)
+        # sup_x_1: (3, 20, 100, 6, 1)
         u_xs = torch.concat([sup_x_1, vs_bar], -1) 
         # u_xs: (3, 20, 100, 6, 33)
         
         u_xs = torch.transpose(u_xs, 3, 2).contiguous()
-        # u_xs: (3, 20, 6, 100, 33)
-        u_xs = self.time_uf(u_xs)
+        # u_xs: (3, 20, 6, 100, 33) 
+        # 각 channel(feature) 별 시간의 변화량으로 data을 읽을 수 있음
+        u_xs = self.time_uf(u_xs) # conv, Fu
         # u_xs: (3, 20, 6, 100, 32)
         
-        u_xs = torch.mean(u_xs, axis=2) # u_xs:(3, 20, 7, 100, 32)
+        u_xs = torch.mean(u_xs, axis=2) 
+        # u_xs:(3, 20, 100, 32), 각 sample(20)별 channel의 평균
         
-        cs_bar = torch.tile(torch.unsqueeze(cs_bar, axis=1), [1,N,1,1]) # cs_bar: (3, 20, 1, 32) # MxNx1xK 
-        u_ys = torch.concat([torch.unsqueeze(sup_y, axis=-1), cs_bar], axis=-1) # u_ys: (3, 20, 1, 33)                    # MxNx1x(K+1) 
+        cs_bar = torch.tile(torch.unsqueeze(cs_bar, axis=1), [1,N,1,1]) 
+        # cs_bar: (3, 20, 1, 32) # MxNx1xK 
+        u_ys = torch.concat([torch.unsqueeze(sup_y, axis=-1), cs_bar], axis=-1) 
+        # u_ys: (3, 20, 1, 33)              # MxNx1x(K+1) 
         u_ys = self.dense_uf(u_ys)          # MxNx1xK # u_ys(3, 20, 1, 32)
         u_ys = torch.mean(u_ys, axis=2)     # MxNxK # u_ys:(3, 20, 32)
         u_ys = torch.unsqueeze(u_ys, 2)     # MxNxK # u_ys:(3, 20, 1, 32)
         u_ys = torch.tile(u_ys, [1,1,T,1])  # MxNxTxK # u_ys(3, 20, 100, 32)
 
         u_s  = u_xs + u_ys         # MxNxTxK # u_s:(3, 20, 100, 32)
-        u_s = self.time_ug(u_s)    # MxNxTxK #
+        u_s = self.time_ug(u_s)    # Conv-Gu MxNxTxK # u_s:(3, 20, 100, 32) (batch, N, T, K)
         
         #### Inference Network #### (DS over Instances)
-        in_xs = torch.tile(torch.unsqueeze(u_s, axis=3), [1, 1, 1, F, 1]) # in_xs: (3, 20, 100, 6, 32)
-        in_xs = torch.concat([sup_x_1, in_xs], -1) # in_xs: (3, 20, 100, 6, 33)
+        in_xs = torch.tile(torch.unsqueeze(u_s, axis=3), [1, 1, 1, F, 1]) 
+        # in_xs: (3, 20, 100, 6, 32)
+        in_xs = torch.concat([sup_x_1, in_xs], -1) 
+        # in_xs: (3, 20, 100, 6, 33)
         
         # Label encoding
         in_ys = torch.mean(u_s, axis=2) # in_ys: (3, 20, 32)
         in_ys = torch.concat([sup_y, in_ys], axis=-1) # in_ys: (3, 20, 33)
-        in_ys = self.dense_fv(in_ys) # in_ys: (3, 20, 32)
+        in_ys = self.dense_fv(in_ys) # gw, in_ys: (3, 20, 32)
         
         in_xs = torch.transpose(in_xs, 3, 2) # in_xs: (3, 20, 6, 100, 33)
-        in_xs = self.time_fv(in_xs) # in_xs: (3, 20, 6, 100, 32)
+        in_xs = self.time_fv(in_xs) # fv, in_xs: (3, 20, 6, 100, 32)
         in_xs = torch.mean(in_xs, axis=1) # in_xs: (3, 6, 100, 32)
-        in_xs = self.time_gv(in_xs) # in_xs: (3, 6, 100, 32)
+        in_xs = self.time_gv(in_xs) # gv, in_xs: (3, 6, 100, 32)
         in_xs = torch.transpose(in_xs, 2, 1) # in_xs: (3, 100, 6, 32)
         
         #### Prediction Network ####
@@ -404,5 +414,5 @@ class TimeHetNet(nn.Module):
                     out = torch.div(out, zero_count)
                     
         out = torch.concat([out, in_ys], -1) # out: (3, 20, 64)
-        out = self.dense_fz(out) # out: (3, 20, 1)
+        out = self.dense_fz(out) # out: (3, 20, 1) # output 의 1의 값이 변경될 수 있어야 한다. T'의 y' 값
         return out
