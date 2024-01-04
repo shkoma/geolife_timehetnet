@@ -60,7 +60,7 @@ def argument_parser():
     ####### Training args ######
     parser.add_argument('--lr', help='Learning rate for optimizer', default=0.001   , type=float)
     parser.add_argument('--split', help='split index we wish to use', default=0   , type=int)
-    parser.add_argument('--num_epochs', help='Number of training epochs', default=1   , type=int)
+    parser.add_argument('--num_epochs', help='Number of training epochs', default=3   , type=int)
     # parser.add_argument('--num_epochs', help='Number of training epochs', default=15000   , type=int)
     
     ####### Early Stopping######

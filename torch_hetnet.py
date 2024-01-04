@@ -148,7 +148,7 @@ class HetNet(nn.Module):
         u_xs = torch.tile(torch.unsqueeze(u_s, axis=2), [1, 1, torch._shape_as_tensor(sup_x)[2], 1])
         if not self.base:
             u_xq = torch.tile(torch.unsqueeze(u_q,axis=2),[1, 1, torch._shape_as_tensor(que_x)[2], 1])
-        u_ys = torch.tile(torch.unsqueeze(u_s,axis=2),[1, 1, torch._shape_as_tensor(sup_y)[2], 1])
+        u_ys = torch.tile(torch.unsqueeze(u_s, axis=2), [1, 1, torch._shape_as_tensor(sup_y)[2], 1])
         print('# Tile u features from NxK to NxFxK / NxJxK')
         print("u_xs.shape, u_ys.shape:", u_xs.shape, u_ys.shape)
         

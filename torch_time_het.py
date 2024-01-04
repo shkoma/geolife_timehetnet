@@ -137,7 +137,7 @@ class GruBlock(nn.Module):
                           name=f"{name}")
 
     def forward(self, inp):
-        # input is TASKS x SAMPLES x TIME x FEATURES
+        # input is TASKS x SAMPLES x FEATURES x TIME x Latent vector
         shape = torch._shape_as_tensor(inp)
         # (3, 20, 6, 100, 1)
         x = torch.reshape(inp, [-1, shape[-2], shape[-1]])
@@ -157,17 +157,20 @@ class GruBlock(nn.Module):
         return out
 
 
-def getSequential(dims=[32, 32, 1], name=None, activation=None, begin = True, middle = False, final=True):
+def getSequential(dims=[32, 32, 1], name=None, activation=None,
+                  begin = True, middle = False, y_middle = False, final=True,
+                  out_features = 2):
     final_list = []
-    
     for idx, n in enumerate(dims):
         if final and idx == (len(dims) - 1):
-            final_list.append(My_Linear(in_features=dims[idx-1], out_features=1, name=f"{name} - {idx}"))
+            final_list.append(My_Linear(in_features=dims[idx-1], out_features=out_features, name=f"{name} - {idx}"))
         else:
             if begin and idx == 0: # begin 의 input_shape 변경이 필요할 듯
                 final_list.append(My_Linear(1, dims[idx], name=f"{name}-{idx}"))
             elif middle and idx == 0:
                 final_list.append(My_Linear(33, dims[idx], name=f"{name}-{idx}"))
+            elif y_middle and idx == 0:
+                final_list.append(My_Linear((32 + out_features), dims[idx], name=f"{name}-{idx}"))
             elif final and idx == 0:
                 final_list.append(My_Linear(64, dims[idx], name=f"{name}-{idx}"))
             else:    
@@ -196,21 +199,25 @@ class TimeHetNet(nn.Module):
                 batchnorm = False,
                 block = "conv",
                 merge = False,
-                dropout = 0.0):
+                dropout = 0.0,
+                output_shape = [1, 2]):
         super(TimeHetNet, self).__init__()
         self.enc_type = 'None'
         
         if len(block) == 1:
             block = f"{block},{block},{block},{block}"
         self.block = block
-        
+        self.output_shape = output_shape
+        self.out_features = (output_shape[0] * output_shape[1])
+
         ## Prediction network
         self.dense_fz = getSequential(dims=dims_pred, 
                                       activation=activation,
                                       begin=False,
                                       middle=False, 
                                       final=True, 
-                                      name="pred_dense_fz")
+                                      name="pred_dense_fz",
+                                      out_features=self.out_features)
         self.time_fz = getTimeBlock(block=block[-1], 
                                     dims=dims_pred, 
                                     activation=activation,
@@ -244,16 +251,19 @@ class TimeHetNet(nn.Module):
         self.dense_fv = getSequential(dims=dims_inf,
                                       activation=activation,
                                       begin=False,
-                                      middle=True,
+                                      middle=False,
+                                      y_middle=True,
                                       final=False,
-                                      name="s_dense_fv")
+                                      name="s_dense_fv",
+                                      out_features=self.out_features)
         # # U net
         self.dense_uf = getSequential(dims=dims_inf,
                                       activation=activation,
                                       begin=False,
                                       middle=True,
                                       final=False,
-                                      name="ux_dense_f")
+                                      name="ux_dense_f",
+                                      out_features=self.out_features)
         self.time_uf = getTimeBlock(block=block[1],
                                     dims=dims_inf,
                                     activation=activation,
@@ -291,21 +301,27 @@ class TimeHetNet(nn.Module):
                                       begin=True,
                                       middle=False,
                                       final=False,
-                                      name="vb_dense_v, fc_bar")
+                                      name="vb_dense_v, fc_bar",
+                                      out_features=self.out_features)
         self.dense_c  = getSequential(dims=dims_inf,
                                       activation=activation,
                                       begin=False,
                                       middle=False,
                                       final=False,
-                                      name="vb_dense_c, gc_bar")
+                                      name="vb_dense_c, gc_bar",
+                                      out_features=self.out_features)
     
     # input should be [Metabatch x samples X Time X features] and 
     #                 [Metabatch samples X labels]
     def forward(self, inp):
         que_x, sup_x, sup_y = inp
-        que_x = torch.from_numpy(que_x).float()
-        sup_x = torch.from_numpy(sup_x).float()
-        sup_y = torch.from_numpy(sup_y).float()
+        # que_x = torch.from_numpy(que_x).float()
+        # sup_x = torch.from_numpy(sup_x).float()
+        # sup_y = torch.from_numpy(sup_y).float()
+        
+        sup_y_shape     = torch._shape_as_tensor(sup_y)
+        sup_y_shape_new = sup_y_shape[:-2].tolist() + [-1]
+        sup_y           = torch.reshape(sup_y, sup_y_shape_new)
         
         M = torch._shape_as_tensor(sup_x)[0] # Batch (user_id)
         N = torch._shape_as_tensor(sup_x)[1] # Mini-Batch
@@ -323,7 +339,7 @@ class TimeHetNet(nn.Module):
         # Encode sup_x MxNxTxF to MxFxTxK (DS over Instances)
         vs_bar = torch.transpose(sup_x, 3, 2).contiguous()
         # vs_bar: (3, 20, 6, 100)
-        vs_bar = torch.unsqueeze(vs_bar, -1)
+        vs_bar = torch.unsqueeze(vs_bar, -1) # 각 채널당 Time의 변화를 볼 수 있게 만듬
         # vs_bar: (3, 20, 6, 100, 1)
         vs_bar = self.time_v(vs_bar) # gru (fv bar)
         # vs_bar: (3, 20, 6, 100, 32)
@@ -379,16 +395,21 @@ class TimeHetNet(nn.Module):
         in_xs = torch.concat([sup_x_1, in_xs], -1) 
         # in_xs: (3, 20, 100, 6, 33)
         
-        # Label encoding
-        in_ys = torch.mean(u_s, axis=2) # in_ys: (3, 20, 32)
-        in_ys = torch.concat([sup_y, in_ys], axis=-1) # in_ys: (3, 20, 33)
-        in_ys = self.dense_fv(in_ys) # gw, in_ys: (3, 20, 32)
+        # # Label encoding
+        # in_ys = torch.mean(u_s, axis=2) # in_ys: (3, 20, 32)
+        # in_ys = torch.concat([sup_y, in_ys], axis=-1) # in_ys: (3, 20, 33)
+        # in_ys = self.dense_fv(in_ys) # gw, in_ys: (3, 20, 32)
         
         in_xs = torch.transpose(in_xs, 3, 2) # in_xs: (3, 20, 6, 100, 33)
         in_xs = self.time_fv(in_xs) # fv, in_xs: (3, 20, 6, 100, 32)
         in_xs = torch.mean(in_xs, axis=1) # in_xs: (3, 6, 100, 32)
         in_xs = self.time_gv(in_xs) # gv, in_xs: (3, 6, 100, 32)
         in_xs = torch.transpose(in_xs, 2, 1) # in_xs: (3, 100, 6, 32)
+        
+        # Label encoding
+        in_ys = torch.mean(u_s, axis=2) # in_ys: (3, 20, 32)
+        in_ys = torch.concat([sup_y, in_ys], axis=-1) # in_ys: (3, 20, 33)
+        in_ys = self.dense_fv(in_ys) # gw, in_ys: (3, 20, 32)
         
         #### Prediction Network ####
         p_xs = torch.tile(torch.unsqueeze(in_xs, axis=1), [1, N, 1, 1, 1]) # p_xs: (3, 20, 100, 6, 32)
@@ -415,4 +436,7 @@ class TimeHetNet(nn.Module):
                     
         out = torch.concat([out, in_ys], -1) # out: (3, 20, 64)
         out = self.dense_fz(out) # out: (3, 20, 1) # output 의 1의 값이 변경될 수 있어야 한다. T'의 y' 값
+        out_shape = torch._shape_as_tensor(out)
+        out_shape_new = out_shape[:-1].tolist() + [-1] + [self.output_shape[1]] # 2: location, -1: time-step(y_timestep)
+        out = torch.reshape(out, out_shape_new)
         return out
