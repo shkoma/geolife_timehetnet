@@ -13,8 +13,8 @@ from torch import nn
 from torch import optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+# from sklearn.model_selection import train_test_split
+# from sklearn.metrics import accuracy_score
 
 # Custom libraries
 from data_sampling.data_gen_ts    import Task_Sampler
@@ -24,7 +24,7 @@ from data_sampling.load_gens      import *
 from torch_time_model import SliceEncoderModel as SEncModel
 from torch_hetnet import HetNet
 from torch_time_het import TimeHetNet
-from torch_experiment_test import run_experiment
+# from torch_experiment_test import run_experiment
 from torch_geolife_dateset import GeoLifeDataSet
 
 ###########
@@ -48,7 +48,7 @@ def metricMSE(y_true, y_pred):
     res = mse(y_true, y_pred)
     return torch.mean(res)
 
-gc.enable()
+# gc.enable()
 
 args = argument_parser()
 file_time = str(datetime.datetime.now()).replace(" ", "_")
@@ -79,10 +79,10 @@ print("Building Network ...")
 
 ###################### TimeHetNet ######################
 model      = TimeHetNet(dims_inf = ast.literal_eval(args.dims),
-                        dims_pred = ast.literal_eval(args.dims_pred), 
-                        activation="relu", 
+                        dims_pred = ast.literal_eval(args.dims_pred),
+                        activation="relu",
                         time=args.tmax_length,
-                        batchnorm=args.batchnorm, 
+                        batchnorm=args.batchnorm,
                         block = args.block.split(","),
                         output_shape=[y_timestep, 2])
 
@@ -110,13 +110,13 @@ model = model.to(torch.float)
 user_list = os.listdir(data_dir)
 random.shuffle(user_list)
 
-train_len = (int)(len(user_list) * train_size)
-validation_len = (int)(len(user_list) * validation_size)
+train_len       = (int)(len(user_list) * train_size)
+validation_len  = (int)(len(user_list) * validation_size)
 
 train_list      = user_list[:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
-# test_list       = user_list[(train_len + validation_len):]
 test_list       = user_list[(train_len + validation_len):(train_len + validation_len + 3)]
+# test_list       = user_list[(train_len + validation_len):]
 print(f"train_list:      {train_list}")
 print(f"validation_list: {validation_list}")
 print(f"test_list:       {test_list}")
@@ -176,7 +176,7 @@ for epoch in range(args.num_epochs):
             val_loss = loss_object(val_outputs, y_val)
             loss_val += val_loss.item()
         loss_val_list.append(loss_val)
-        print(f"train loss {loss_train}, validation loss: {loss_val}")
+        print(f"train loss: {loss_train}, validation loss: {loss_val}")
         # print(f"train loss {loss_train_list}") 
         # print(f"validation loss: {loss_val_list}")
     

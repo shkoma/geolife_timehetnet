@@ -149,17 +149,18 @@ class LocationPreprocessor():
         delta_lat = user['latitude'] - center_locatuon[0]
         delta_lon = user['longitude'] - center_locatuon[1]
         
-        user['latitude'] = delta_lon * self.earth_radius * (np.pi / 180) * np.cos(user['latitude'] * (np.pi / 180))
-        user['longitude'] = delta_lat * self.earth_radius * (np.pi / 180)
+        user['x'] = delta_lon * self.earth_radius * (np.pi / 180) * np.cos(user['latitude'] * (np.pi / 180))
+        user['y'] = delta_lat * self.earth_radius * (np.pi / 180)
         return user
 
 # Convert user's location(Coordinate)
 # locationPreprocessor = LocationPreprocessor()
 # valid_user_list = locationPreprocessor.get_valid_user_list()
 # for id in valid_user_list['valid_user_list']:
+#     print(f"user id: {id}")
 #     user_id = locationPreprocessor.getUserId(id)
 #     csv_file = './Data/' + user_id + '/csv/' + user_id + '.csv'
 #     csv_convert_file = './Data/' + user_id + '/csv/' + user_id + '_converted.csv'
 #     user = pd.read_csv(csv_file)
 #     user = locationPreprocessor.convert_coord_for_blender_for_user(user)
-#     user.to_csv(csv_convert_file)
+#     user.to_csv(csv_convert_file, index=False)

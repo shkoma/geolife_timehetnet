@@ -334,7 +334,6 @@ class TimeHetNet(nn.Module):
         zero_count = torch.unsqueeze(zero_count, -1)
         
         # sup_x: (3, 20, 100, 6)
-        
         ##### Vbar network #####
         # Encode sup_x MxNxTxF to MxFxTxK (DS over Instances)
         vs_bar = torch.transpose(sup_x, 3, 2).contiguous()
