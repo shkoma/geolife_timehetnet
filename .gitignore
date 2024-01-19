@@ -6,3 +6,9 @@
 *.pth
 *.pdf
 *.txt
+*.gz
+*-ubyte
+events.*
+*.png
+*.tsv
+*.pbtxt

@@ -159,7 +159,7 @@ class GruBlock(nn.Module):
 
 def getSequential(dims=[32, 32, 1], name=None, activation=None,
                   begin = True, middle = False, y_middle = False, final=True,
-                  out_features = 2):
+                  out_features = 2, length = 0):
     final_list = []
     for idx, n in enumerate(dims):
         if final and idx == (len(dims) - 1):
@@ -170,7 +170,7 @@ def getSequential(dims=[32, 32, 1], name=None, activation=None,
             elif middle and idx == 0:
                 final_list.append(My_Linear(33, dims[idx], name=f"{name}-{idx}"))
             elif y_middle and idx == 0:
-                final_list.append(My_Linear((32 + out_features), dims[idx], name=f"{name}-{idx}"))
+                final_list.append(My_Linear((32 + length), dims[idx], name=f"{name}-{idx}"))
             elif final and idx == 0:
                 final_list.append(My_Linear(64, dims[idx], name=f"{name}-{idx}"))
             else:    
@@ -200,7 +200,8 @@ class TimeHetNet(nn.Module):
                 block = "conv",
                 merge = False,
                 dropout = 0.0,
-                output_shape = [1, 2]):
+                output_shape = [1, 2],
+                length = 0):
         super(TimeHetNet, self).__init__()
         self.enc_type = 'None'
         
@@ -209,6 +210,7 @@ class TimeHetNet(nn.Module):
         self.block = block
         self.output_shape = output_shape
         self.out_features = (output_shape[0] * output_shape[1])
+        self.length = length #* output_shape[1]
 
         ## Prediction network
         self.dense_fz = getSequential(dims=dims_pred, 
@@ -217,7 +219,8 @@ class TimeHetNet(nn.Module):
                                       middle=False, 
                                       final=True, 
                                       name="pred_dense_fz",
-                                      out_features=self.out_features)
+                                      out_features=self.out_features,
+                                      length=self.length)
         self.time_fz = getTimeBlock(block=block[-1], 
                                     dims=dims_pred, 
                                     activation=activation,
@@ -255,7 +258,8 @@ class TimeHetNet(nn.Module):
                                       y_middle=True,
                                       final=False,
                                       name="s_dense_fv",
-                                      out_features=self.out_features)
+                                      out_features=self.out_features,
+                                      length=self.length)
         # # U net
         self.dense_uf = getSequential(dims=dims_inf,
                                       activation=activation,
@@ -263,7 +267,8 @@ class TimeHetNet(nn.Module):
                                       middle=True,
                                       final=False,
                                       name="ux_dense_f",
-                                      out_features=self.out_features)
+                                      out_features=self.out_features,
+                                      length=self.length)
         self.time_uf = getTimeBlock(block=block[1],
                                     dims=dims_inf,
                                     activation=activation,
@@ -302,23 +307,22 @@ class TimeHetNet(nn.Module):
                                       middle=False,
                                       final=False,
                                       name="vb_dense_v, fc_bar",
-                                      out_features=self.out_features)
+                                      out_features=self.out_features,
+                                      length=self.length)
         self.dense_c  = getSequential(dims=dims_inf,
                                       activation=activation,
                                       begin=False,
                                       middle=False,
                                       final=False,
                                       name="vb_dense_c, gc_bar",
-                                      out_features=self.out_features)
+                                      out_features=self.out_features,
+                                      length=self.length)
     
     # input should be [Metabatch x samples X Time X features] and 
     #                 [Metabatch samples X labels]
     def forward(self, inp):
         que_x, sup_x, sup_y = inp
-        # que_x = torch.from_numpy(que_x).float()
-        # sup_x = torch.from_numpy(sup_x).float()
-        # sup_y = torch.from_numpy(sup_y).float()
-        
+
         sup_y_shape     = torch._shape_as_tensor(sup_y)
         sup_y_shape_new = sup_y_shape[:-2].tolist() + [-1]
         sup_y           = torch.reshape(sup_y, sup_y_shape_new)

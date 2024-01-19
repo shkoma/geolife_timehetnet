@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 # train_set(dataset), test_set(dataset) 으로 진행 필요
 
 class GeoLifeDataSet(Dataset):
-    def __init__(self, data_dir, user_list, samples_s, samples_q, length, y_timestep):
+    def __init__(self, data_dir, user_list, samples_s, samples_q, length, y_timestep, gap=1):
         self.data_dir   = data_dir
         self.csv_dir    = 'csv/'
         self.user_list  = user_list #os.listdir(data_dir)
@@ -24,6 +24,8 @@ class GeoLifeDataSet(Dataset):
         self.y_timestep = y_timestep
         # y_time_step: the next time step to be predicted
         #              it must be less than length
+        self.gap = gap
+        # gap: the gap of time to check a user's location
     
     def sampleTime(self, dataset):
         cur_ds = dataset.copy()
@@ -76,21 +78,38 @@ class GeoLifeDataSet(Dataset):
         
     def __getitem__(self, index):
         csv_path = os.path.join(self.data_dir, self.user_list[index], self.csv_dir)
-        user_file = csv_path + self.user_list[index] + '.csv'
+        user_file = csv_path + self.user_list[index] + '_converted.csv'
         df = pd.read_csv(user_file)
-        df = df[['days','latitude', 'longitude']]
+        # df['realTime'] = df['days'] * 10000
+        # df = df[['days', 'latitude', 'longitude']]
+        df = df.drop_duplicates(subset=['days'])
+        df_1 = df[['days', 'x', 'y']]
+        
+        idx_list = []
+        for idx in range(df_1.shape[0]):
+            if idx % self.gap == 0: # gap==60 -> 5 mins
+                idx_list += [idx]
+        user_df = df_1.iloc[idx_list, :].copy()
 
-        samples = self.sampleTime(df)
+        samples = self.sampleTime(user_df)
         if samples.size < 2:
             return (torch.from_numpy(samples).float(), torch.from_numpy(samples).float())
 
-        # print(f"mini_batch: {samples.shape}")
-        # mini_batch: (5, 10, 3)
+        task_X = samples.copy()
+        task_y = task_X[:, -self.y_timestep:, -2:].copy()
         
-        sup_x = np.array(samples[:self.samples_s, :-self.y_timestep, :])
-        sup_y = np.array(samples[:self.samples_s, -self.y_timestep:, -2:])
-        que_x = np.array(samples[self.samples_s:, :-self.y_timestep, :])
-        que_y = np.array(samples[self.samples_s:, -self.y_timestep:, -2:])
+        if self.y_timestep > 0:
+            task_X[:, -self.y_timestep:, -2:] = 0
+        
+        # sup_x = np.array(samples[:self.samples_s, :, [0]])
+        # sup_y = np.array(samples[:self.samples_s, :, -2:])
+        # que_x = np.array(samples[self.samples_s:, :, [0]])
+        # que_y = np.array(samples[self.samples_s:, -self.y_timestep:, -2:])
+        
+        sup_x = np.array(task_X[:self.samples_s, :, :])
+        sup_y = np.array(task_y[:self.samples_s, :, :])
+        que_x = np.array(task_X[self.samples_s:, :, :])
+        que_y = np.array(task_y[self.samples_s:, :, :])
         
         sup_x = torch.from_numpy(sup_x).float()
         sup_y = torch.from_numpy(sup_y).float()

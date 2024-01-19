@@ -5,7 +5,8 @@ import numpy as np
 import os
 
 class LocationPreprocessor():
-    def __init__(self):
+    def __init__(self, data_path=""):
+        self.data_path = data_path
         self.earth_radius = 6371000
         self.min_max_file = 'min_max_location.csv'
         self.valid_user_file = 'valid_user_list.csv'
@@ -25,11 +26,11 @@ class LocationPreprocessor():
         return val
 
     def get_valid_user_list(self):
-        if os.path.isfile(self.valid_user_file):
-            df = pd.read_csv(self.valid_user_file)
+        if os.path.isfile(self.data_path + self.valid_user_file):
+            df = pd.read_csv(self.data_path + self.valid_user_file)
             return df
         else:
-            print(f'{self.valid_user_file} is not valid')
+            print(f'{self.data_path + self.valid_user_file} is not valid')
             return pd.DataFrame()
         
     def set_valid_user_list(self):
