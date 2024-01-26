@@ -137,18 +137,18 @@ class LocationPreprocessor():
         return self.center_location
     
     def convert_coord_for_blender(self, lat, lon):
-        center_locatuon = self.get_center_location()
-        delta_lat = lat - center_locatuon[0]
-        delta_lon = lon - center_locatuon[1]
+        center_location = self.get_center_location()
+        delta_lat = lat - center_location[0]
+        delta_lon = lon - center_location[1]
         
         x = delta_lon * self.earth_radius * (np.pi / 180) * np.cos(lat * (np.pi / 180))
         y = delta_lat * self.earth_radius * (np.pi / 180)
         return x, y
     
     def convert_coord_for_blender_for_user(self, user):
-        center_locatuon = self.get_center_location()
-        delta_lat = user['latitude'] - center_locatuon[0]
-        delta_lon = user['longitude'] - center_locatuon[1]
+        center_location = self.get_center_location()
+        delta_lat = user['latitude'] - center_location[0]
+        delta_lon = user['longitude'] - center_location[1]
         
         user['x'] = delta_lon * self.earth_radius * (np.pi / 180) * np.cos(user['latitude'] * (np.pi / 180))
         user['y'] = delta_lat * self.earth_radius * (np.pi / 180)

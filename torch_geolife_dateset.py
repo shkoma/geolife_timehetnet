@@ -101,11 +101,6 @@ class GeoLifeDataSet(Dataset):
         if self.y_timestep > 0:
             task_X[:, -self.y_timestep:, -2:] = 0
         
-        # sup_x = np.array(samples[:self.samples_s, :, [0]])
-        # sup_y = np.array(samples[:self.samples_s, :, -2:])
-        # que_x = np.array(samples[self.samples_s:, :, [0]])
-        # que_y = np.array(samples[self.samples_s:, -self.y_timestep:, -2:])
-        
         sup_x = np.array(task_X[:self.samples_s, :, :])
         sup_y = np.array(task_y[:self.samples_s, :, :])
         que_x = np.array(task_X[self.samples_s:, :, :])

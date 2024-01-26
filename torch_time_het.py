@@ -170,7 +170,7 @@ def getSequential(dims=[32, 32, 1], name=None, activation=None,
             elif middle and idx == 0:
                 final_list.append(My_Linear(33, dims[idx], name=f"{name}-{idx}"))
             elif y_middle and idx == 0:
-                final_list.append(My_Linear((32 + length), dims[idx], name=f"{name}-{idx}"))
+                final_list.append(My_Linear((32 + out_features), dims[idx], name=f"{name}-{idx}"))
             elif final and idx == 0:
                 final_list.append(My_Linear(64, dims[idx], name=f"{name}-{idx}"))
             else:    
