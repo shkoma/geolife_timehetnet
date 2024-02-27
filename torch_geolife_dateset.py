@@ -10,9 +10,9 @@ from torch.utils.data import Dataset
 # train_set(dataset), test_set(dataset) 으로 진행 필요
 
 class GeoLifeDataSet(Dataset):
-    def __init__(self, data_dir, user_list, samples_s, samples_q, length, y_timestep, gap=1, label_attribute = 1, mode = 'None'):
+    def __init__(self, data_dir, user_list, samples_s, samples_q, length, y_timestep, gap=1, label_attribute = 1):
         self.data_dir   = data_dir
-        self.csv_dir    = 'csv/'
+        self.csv_dir    = '/csv/'
         self.user_list  = user_list #os.listdir(data_dir)
         # user_list: all user
         self.samples_s  = samples_s
@@ -29,25 +29,13 @@ class GeoLifeDataSet(Dataset):
         self.label_attribute = label_attribute
         self.columns = []
         
+        # CUDA for PyTorch
+        use_cuda = torch.cuda.is_available()
+        self.device = torch.device("cuda:0" if use_cuda else "cpu")
+
         # grid + original data
-        # if mode == 'train':
-        #     self.csv_file = '_origin_train_set.csv'
-        # elif mode == 'valid':
-        #     self.csv_file = '_origin_valid_set.csv'
-        # elif mode == 'test':
-        #     self.csv_file = '_origin_test_set.csv'
-        # else:
-        #     self.csv_file = '_origin_grid_10min.csv'
-        
-        # grid + extra rounded
-        if mode == 'train':
-            self.csv_file = '_train_set.csv'
-        elif mode == 'valid':
-            self.csv_file = '_valid_set.csv'
-        elif mode == 'test':
-            self.csv_file = '_test_set.csv'
-        else:
-            self.csv_file = '_grid_10min.csv'
+        self.csv_file = '_origin_grid_1min.csv'
+
     
     def get_train_columns(self):
         return self.columns
@@ -102,7 +90,8 @@ class GeoLifeDataSet(Dataset):
         return np.array(minibatch)
         
     def __getitem__(self, index):
-        csv_path = os.path.join(self.data_dir, self.user_list[index], self.csv_dir)
+        # csv_path = os.path.join(self.data_dir, self.user_list[index], self.csv_dir)
+        csv_path = str(self.data_dir) + str(self.user_list[index]) + self.csv_dir
         user_file = csv_path + self.user_list[index] + self.csv_file
         df = pd.read_csv(user_file)
         df_1 = df[df.columns[2:5].to_list()].copy()
@@ -147,10 +136,10 @@ class GeoLifeDataSet(Dataset):
         que_x = np.array(task_X[self.samples_s:, :, :])
         que_y = np.array(task_y[self.samples_s:, :, :])
         
-        sup_x = torch.from_numpy(sup_x).double()
-        sup_y = torch.from_numpy(sup_y).double()
-        que_x = torch.from_numpy(que_x).double()
-        que_y = torch.from_numpy(que_y).double()
+        sup_x = torch.from_numpy(sup_x).double().to(self.device)
+        sup_y = torch.from_numpy(sup_y).double().to(self.device)
+        que_x = torch.from_numpy(que_x).double().to(self.device)
+        que_y = torch.from_numpy(que_y).double().to(self.device)
         
         sup_M = torch._shape_as_tensor(sup_x)[0] # Mini-Batch (the number of support set)
         que_M = torch._shape_as_tensor(que_x)[0]

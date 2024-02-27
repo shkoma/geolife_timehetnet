@@ -43,13 +43,18 @@ device = torch.device("cuda:0" if use_cuda else "cpu")
 # torch.backends.cudnn.benchmark = True
 
 def metricsSTD(y_true, y_pred):
-    res = nn.mse(y_true, y_pred)
+    res = nn.MSELoss(y_true, y_pred)
     return torch.std(res, unbiased=False)
 
 def metricMSE(y_true, y_pred):
-    res = mse(y_true, y_pred)
+    loss_f = nn.MSELoss()
+    res = loss_f(y_true, y_pred)
     return torch.mean(res)
 
+def metricDist(y_true, y_pred):
+    row = (y_pred[:,:,:,0] - y_true[:,:,:,0])**2
+    col = (y_pred[:,:,:,1] - y_true[:,:,:,1])**2
+    return torch.mean(row + col) ** 0.5
 
 def make_Tensorboard_dir(dir_name, dir_format):
     root_logdir = os.path.join(os.curdir, dir_name)
@@ -80,12 +85,12 @@ loss_method = 'mse'
 loss_val_step = 3
 lr_epoch = 300
 
-sample_s = 1
-sample_q = 1
+sample_s = 2
+sample_q = 2
 
 args_epoch = 5000
 args_patience = 5
-args_factor = 0.5
+args_factor = 0.1
 
 gap_min = 12 # 1 min
 gap = gap_min
@@ -93,18 +98,18 @@ gap = gap_min
 day = 144
 week = 1008
 y_timestep = (int(day/24) * 12)  #12 # must be less than length, 12 = 1 hour, 12 * 24 = 288 -> 1day
-length = 3 * week
+length = week
 
 train_size = 0.7
 validation_size = 0.1
-batch_size = 1 # each user
+batch_size = 3 # each user
 batch_norm = False
 
 ## Train Phase
 is_train = True
 best_model_path = 'best_model.pth'
 best_train_model = 'best_train_model.pth'
-user_list_file = 'extra_ratio.csv'
+user_list_file = 'grid_user_list.csv'
 
 ## Test Phase
 # is_train = False
@@ -161,8 +166,6 @@ user_list = []
 # random.shuffle(user_list)
 
 import pandas as pd
-# df = pd.read_csv('data/geolife/round_10min_user_list.csv')
-# user_df = df.sort_values(['original_len', 'rounded_len'], ascending=[False, False])
 user_df = pd.read_csv('data/geolife/' + user_list_file)
 for user in user_df['user_id'].to_list():
     user_list += [locationPreprocessor.getUserId(user)]
@@ -183,15 +186,11 @@ validation_list = user_list[6:8]
 test_list       = user_list[6:8]
 
 # test_list       = user_list[(train_len + validation_len):]
+print(f"use_cuda: {use_cuda}, device: {device}")
 print(f"train_len: {train_len}, val_len: {validation_len}")
 print(f"train_list:      {train_list}")
 print(f"validation_list: {validation_list}")
 print(f"test_list:       {test_list}")
-
-# single user
-# training_data   = GeoLifeDataSet(data_dir, train_list, sample_s, sample_q, length, y_timestep, gap, label_attribute, mode='train')
-# validation_data = GeoLifeDataSet(data_dir, validation_list, sample_s, sample_q, length, y_timestep, gap, label_attribute, mode='valid')
-# test_data       = GeoLifeDataSet(data_dir, test_list, sample_s, sample_q, length, y_timestep, gap, label_attribute, mode='test')
 
 # multi user
 training_data   = GeoLifeDataSet(data_dir, train_list, sample_s, sample_q, length, y_timestep, gap, label_attribute)
@@ -202,8 +201,8 @@ train_dataloader      = DataLoader(training_data, batch_size, shuffle=False)
 validation_dataloader = DataLoader(validation_data, batch_size, shuffle=False)
 test_dataloader       = DataLoader(test_data, batch_size, shuffle=False)
 
-randomNumber = int(np.random.rand(1) * 10000000)
-print("-------ID Number is:", randomNumber)
+# randomNumber = int(np.random.rand(1) * 10000000)
+# print("-------ID Number is:", randomNumber)
 
 def write_configruation(conf_file):
     #--------Write Configration--------
@@ -261,7 +260,6 @@ if is_train == True:
     
     loss_val_mean = 0
     val_count = 0
-    # for epoch in range(args.num_epochs):
     for epoch in range(args_epoch):
         print(f"epoch: {epoch}")
         
@@ -273,9 +271,8 @@ if is_train == True:
                 continue
             optimizer.zero_grad()
             outputs = model(X_train)
-            # torch.set_printoptions(precision=0)
-            # outputs = torch.round(outputs, decimals=5)
-            loss = loss_object(outputs, y_train)
+            # loss = loss_object(y_train, outputs)
+            loss = metricDist(y_train, outputs)
             loss.backward()
             optimizer.step()
             loss_train += loss.item()
@@ -292,27 +289,12 @@ if is_train == True:
                 X_val, y_val = val_data
                 if len(X_val) < 2:
                     continue
-                val_outputs = model(X_val)
-                
-                # torch.set_printoptions(precision=0)
-                # val_outputs = torch.round(val_outputs, decimals=5)
-                
-                val_loss = loss_object(val_outputs, y_val)            
+                val_outputs = model(X_val)                
+                val_loss = metricDist(y_val, val_outputs)
                 loss_val += val_loss.item()
             writer.add_scalar('validation loss', loss_val, epoch)
-            # loss_val_list.append(loss_val)
             print(f"train loss: {loss_train}, validation loss: {loss_val}")
             lr_scheduler.step(loss_val)
-            # if epoch > lr_epoch:
-            #     loss_val_mean += loss_val
-            #     val_count += 1
-            #     if (val_count % loss_val_step) == 0:
-            #         print(f'lr loss: {loss_val_mean/loss_val_step}')
-            #         lr_scheduler.step(loss_val_mean/loss_val_step)
-            #         val_count = 0
-            #         loss_val_mean = 0
-            # else:
-            #     lr_scheduler.step(loss_val)
         
         # if lr_scheduler.num_bad_epochs > lr_scheduler.patience:
         #     print(f"Early stopping after {epoch+1} epochs.")
