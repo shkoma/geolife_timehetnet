@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 # train_set(dataset), test_set(dataset) 으로 진행 필요
 
 class GeoLifeDataSet(Dataset):
-    def __init__(self, data_dir, user_list, samples_s, samples_q, length, y_timestep, gap=1):
+    def __init__(self, data_dir, user_list, samples_s, samples_q, length, y_timestep, gap=1, label_attribute = 1, mode = 'None'):
         self.data_dir   = data_dir
         self.csv_dir    = 'csv/'
         self.user_list  = user_list #os.listdir(data_dir)
@@ -26,7 +26,32 @@ class GeoLifeDataSet(Dataset):
         #              it must be less than length
         self.gap = gap
         # gap: the gap of time to check a user's location
+        self.label_attribute = label_attribute
+        self.columns = []
+        
+        # grid + original data
+        # if mode == 'train':
+        #     self.csv_file = '_origin_train_set.csv'
+        # elif mode == 'valid':
+        #     self.csv_file = '_origin_valid_set.csv'
+        # elif mode == 'test':
+        #     self.csv_file = '_origin_test_set.csv'
+        # else:
+        #     self.csv_file = '_origin_grid_10min.csv'
+        
+        # grid + extra rounded
+        if mode == 'train':
+            self.csv_file = '_train_set.csv'
+        elif mode == 'valid':
+            self.csv_file = '_valid_set.csv'
+        elif mode == 'test':
+            self.csv_file = '_test_set.csv'
+        else:
+            self.csv_file = '_grid_10min.csv'
     
+    def get_train_columns(self):
+        return self.columns
+        
     def sampleTime(self, dataset):
         cur_ds = dataset.copy()
         minibatch = []
@@ -78,38 +103,62 @@ class GeoLifeDataSet(Dataset):
         
     def __getitem__(self, index):
         csv_path = os.path.join(self.data_dir, self.user_list[index], self.csv_dir)
-        user_file = csv_path + self.user_list[index] + '_converted.csv'
+        user_file = csv_path + self.user_list[index] + self.csv_file
         df = pd.read_csv(user_file)
-        # df['realTime'] = df['days'] * 10000
-        # df = df[['days', 'latitude', 'longitude']]
-        df = df.drop_duplicates(subset=['days'])
-        df_1 = df[['days', 'x', 'y']]
-        
-        idx_list = []
-        for idx in range(df_1.shape[0]):
-            if idx % self.gap == 0: # gap==60 -> 5 mins
-                idx_list += [idx]
-        user_df = df_1.iloc[idx_list, :].copy()
+        df_1 = df[df.columns[2:5].to_list()].copy()
+        df_1 = pd.concat([df_1, df.iloc[:, 6:11]], axis=1) # ~ Hour + 100m
+        # df_1 = pd.get_dummies(df_1, columns=['hour'], drop_first=True)
+
+        df_1 = pd.concat([df_1, df.iloc[:, 13:15]], axis=1) # 100m
+        df_1 = pd.concat([df_1, df.iloc[:, 21:]], axis=1) # 2000m
+        df_1 = pd.concat([df_1, df.iloc[:, 17:19]], axis=1) # 1000m
+        df_1 = pd.concat([df_1, df.iloc[:, 15:17]], axis=1) # 500m
+        # df_1 = pd.concat([df_1, df.iloc[:, 11:13]], axis=1) # 50m
+
+        if len(self.columns) < 1:
+            # just for log
+            self.columns = df_1.columns.to_list()
+
+        user_df = df_1.copy()
+
+        # idx_list = []
+        # for idx in range(df_1.shape[0]):
+        #     if idx % self.gap == 0: # gap==60 -> 5 mins
+        #         idx_list += [idx]
+        # user_df = df_1.iloc[idx_list, :].copy()
+        # print(f"user[{self.user_list[index]}]: {user_df.shape}")
+
+        if user_df.shape[0] * 2 < self.length:
+            print(f"user[{self.user_list[index]}]: not enough data")
+            return (torch.from_numpy(samples).double(), torch.from_numpy(samples).double())
 
         samples = self.sampleTime(user_df)
         if samples.size < 2:
-            return (torch.from_numpy(samples).float(), torch.from_numpy(samples).float())
+            return (torch.from_numpy(samples).double(), torch.from_numpy(samples).double())
 
         task_X = samples.copy()
-        task_y = task_X[:, -self.y_timestep:, -2:].copy()
+        task_y = task_X[:, -self.y_timestep:, -self.label_attribute:].copy()
         
         if self.y_timestep > 0:
-            task_X[:, -self.y_timestep:, -2:] = 0
+            task_X[:, -self.y_timestep:, -self.label_attribute:] = 0
         
         sup_x = np.array(task_X[:self.samples_s, :, :])
         sup_y = np.array(task_y[:self.samples_s, :, :])
         que_x = np.array(task_X[self.samples_s:, :, :])
         que_y = np.array(task_y[self.samples_s:, :, :])
         
-        sup_x = torch.from_numpy(sup_x).float()
-        sup_y = torch.from_numpy(sup_y).float()
-        que_x = torch.from_numpy(que_x).float()
-        que_y = torch.from_numpy(que_y).float()
+        sup_x = torch.from_numpy(sup_x).double()
+        sup_y = torch.from_numpy(sup_y).double()
+        que_x = torch.from_numpy(que_x).double()
+        que_y = torch.from_numpy(que_y).double()
+        
+        sup_M = torch._shape_as_tensor(sup_x)[0] # Mini-Batch (the number of support set)
+        que_M = torch._shape_as_tensor(que_x)[0]
+        
+        M = int(sup_M / que_M)
+        if sup_M != que_M:
+            que_x = torch.tile(que_x, [M, 1, 1])
+            que_y = torch.tile(que_y, [M, 1, 1])
 
         return (que_x, sup_x, sup_y), que_y
     

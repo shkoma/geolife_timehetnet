@@ -10,6 +10,8 @@ class GPSGridMapCreator():
         self.long_degrees = 0
         self.num_lat = 0
         self.num_lon = 0
+        self.latitudes = []
+        self.longitudes = []
         
     def km_to_degrees(self, latitude, kilometers):
         # Earth's radius in kilometers
@@ -50,24 +52,31 @@ class GPSGridMapCreator():
         self.num_lat = int(np.abs(lat2 - lat1) / np.abs(self.lat_degrees))
         self.num_lon = int(np.abs(lon2 - lon1) / np.abs(self.lon_degrees))
         # print(f"lon2 - lon1: {np.abs(lon2 - lon1)}")
-        # print(f"num_lat: {self.num_lat}, num_lon: {self.num_lon}")
+        # print(f"len of lat: {self.num_lat}, len of lon: {self.num_lon}")
 
         # Generate latitude and longitude grid points
-        latitudes = np.linspace(lat1, lat2, self.num_lat)
-        longitudes = np.linspace(lon1, lon2, self.num_lon)
+        self.latitudes = np.linspace(lat1, lat2, self.num_lat)
+        self.longitudes = np.linspace(lon1, lon2, self.num_lon)
 
         # Create a 2D grid for numbering
         self.grid_numbers = np.arange(0, (self.num_lat + 1) * (self.num_lon + 1)).reshape(self.num_lat + 1, self.num_lon + 1)
-        print(f"gird_number: {self.grid_numbers.shape[0] * self.grid_numbers.shape[1]}")
+        # print(f"gird_number: {self.grid_numbers.shape[0] * self.grid_numbers.shape[1]}")
 
     def find_grid_number(self, lat, lon):
         # grid_lat = int(np.abs(lat - self.lat1) / np.abs(self.lat_degrees))
         # grid_lon = int(np.abs(lon - self.lon1) / np.abs(self.lon_degrees))
-        grid_lat = (np.abs(lat - self.lat1) / np.abs(self.lat_degrees)).astype(int)
-        grid_lon = (np.abs(lon - self.lon1) / np.abs(self.lon_degrees)).astype(int)
+        grid_row = (np.abs(lat - self.lat1) / np.abs(self.lat_degrees)).astype(int)
+        grid_col = (np.abs(lon - self.lon1) / np.abs(self.lon_degrees)).astype(int)
+        
+        grid_lat = self.lat1 + (np.abs(self.lat_degrees) * grid_row)
+        grid_lon = self.lon1 + (np.abs(self.lon_degrees) * grid_col)
+        
+        grid_num = grid_row * (self.num_lon + 1) + grid_col + 1
         # print(f"grid_lat: { grid_lat * (self.num_lon + 1)}")
-        # print(f"gird_lon: {grid_lon}")
-        return grid_lat * (self.num_lon + 1) + grid_lon + 1
+        # print(f"grid_lat: {grid_row}, gird_lon: {grid_col}")
+        return grid_row, grid_col, grid_lat, grid_lon, grid_num
+        #, self.latitudes[grid_lat-1], self.longitudes[grid_lon-1]
+        # return grid_lat * (self.num_lon + 1) + grid_lon + 1
 
 # Example coordinates
 # lat1, lon1 = 37.0, -122.0  # Lower-left corner

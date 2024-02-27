@@ -154,7 +154,7 @@ class LocationPreprocessor():
         user['y'] = delta_lat * self.earth_radius * (np.pi / 180)
         return user
 
-# Convert user's location(Coordinate)
+### Convert user's location(Coordinate)
 # locationPreprocessor = LocationPreprocessor()
 # valid_user_list = locationPreprocessor.get_valid_user_list()
 # for id in valid_user_list['valid_user_list']:
@@ -162,6 +162,13 @@ class LocationPreprocessor():
 #     user_id = locationPreprocessor.getUserId(id)
 #     csv_file = './Data/' + user_id + '/csv/' + user_id + '.csv'
 #     csv_convert_file = './Data/' + user_id + '/csv/' + user_id + '_converted.csv'
-#     user = pd.read_csv(csv_file)
-#     user = locationPreprocessor.convert_coord_for_blender_for_user(user)
-#     user.to_csv(csv_convert_file, index=False)
+#     user_df = pd.read_csv(csv_file)
+#     user_df = locationPreprocessor.convert_coord_for_blender_for_user(user_df)
+    
+#     user_df['datetime'] = pd.to_datetime(user_df['date'] + " " + user_df['time'])
+#     user_df['month'] = user_df['datetime'].dt.month
+#     user_df['week'] = user_df['datetime'].dt.weekday
+#     user_df['weekend'] = np.where(user_df['week'] < 5, 0, 1)
+#     user_df['hour'] = user_df['datetime'].dt.hour
+#     user_df['day'] = user_df['datetime'].dt.day
+#     user_df.to_csv(csv_convert_file, index=False)

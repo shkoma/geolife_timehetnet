@@ -8,7 +8,7 @@ import time
 class My_Linear(nn.Module):
     def __init__(self, in_features, out_features, bias=True, device=None, name=None):
         super(My_Linear, self).__init__()
-        self.Linear = nn.Linear(in_features, out_features, bias, device)
+        self.Linear = nn.Linear(in_features, out_features, bias, device, dtype=torch.double)
         self.name = name
     
     def forward(self, x):
@@ -24,7 +24,7 @@ class My_Conv1d(nn.Module):
         super(My_Conv1d, self).__init__()
         self.Conv1d = nn.Conv1d(in_features, out_features, kernel_size,
                                 stride, padding, dilation, groups, bias,
-                                padding_mode, device, dtype)
+                                padding_mode, device, dtype=torch.double)
         self.name = name
     
     def forward(self, x):
@@ -53,16 +53,18 @@ class ConvBlock(nn.Module):
         self.c1 = My_Conv1d(in_features=first_features, out_features=dims[0],
                             kernel_size=3, name=f"{name}-0",
                             padding='same', dilation=self.dilation[0])
-        self.relu1 = nn.ReLU()
+        # self.relu1 = nn.ReLU()
+        self.relu1 = nn.LeakyReLU(negative_slope=0.1)
         self.c2 = My_Conv1d(in_features=dims[0], out_features=dims[1],
                             kernel_size=3, name=f"{name}-1",
                             padding='same', dilation=self.dilation[1])
-        self.relu2 = nn.ReLU()
+        # self.relu2 = nn.ReLU()
+        self.relu2 = nn.LeakyReLU(negative_slope=0.1)
         self.c3 = My_Conv1d(in_features=dims[1], out_features=dims[2],
                             kernel_size=3, name=f"{name}-1",
                             padding='same', dilation=self.dilation[2]) 
         if not self.final:
-            self.relu3 = nn.ReLU()
+            self.relu3 = nn.LeakyReLU(negative_slope=0.1) #nn.ReLU()
         
         if self.batchnorm:
             self.bn1 = nn.BatchNorm1d()
@@ -104,7 +106,7 @@ class My_GRU(nn.Module):
                  bidirectional=False, name=None):
         super(My_GRU, self).__init__()
         self.GRU = nn.GRU(input_size, hidden_size, num_layers,
-                          batch_first, bidirectional)
+                          batch_first, bidirectional, dtype=torch.double)
         self.name = name
     # input_size:입력크기로 훈련 데이터셋의 칼럼 갯수
     # hidden_size: 은닉층의 뉴런 갯수
@@ -177,7 +179,8 @@ def getSequential(dims=[32, 32, 1], name=None, activation=None,
                 final_list.append(My_Linear(dims[idx], dims[idx], name=f"{name}-{idx}"))
             
             if activation == 'relu':
-                final_list.append(nn.ReLU())
+                # final_list.append(nn.ReLU())
+                final_list.append(nn.LeakyReLU(negative_slope=0.1))
             else:
                 final_list.append(nn.Sigmoid())
     return nn.Sequential(*final_list)
@@ -398,11 +401,6 @@ class TimeHetNet(nn.Module):
         in_xs = torch.concat([sup_x_1, in_xs], -1) 
         # in_xs: (3, 20, 100, 6, 33)
         
-        # # Label encoding
-        # in_ys = torch.mean(u_s, axis=2) # in_ys: (3, 20, 32)
-        # in_ys = torch.concat([sup_y, in_ys], axis=-1) # in_ys: (3, 20, 33)
-        # in_ys = self.dense_fv(in_ys) # gw, in_ys: (3, 20, 32)
-        
         in_xs = torch.transpose(in_xs, 3, 2) # in_xs: (3, 20, 6, 100, 33)
         in_xs = self.time_fv(in_xs) # fv, in_xs: (3, 20, 6, 100, 32)
         in_xs = torch.mean(in_xs, axis=1) # in_xs: (3, 6, 100, 32)
@@ -417,6 +415,7 @@ class TimeHetNet(nn.Module):
         #### Prediction Network ####
         p_xs = torch.tile(torch.unsqueeze(in_xs, axis=1), [1, N, 1, 1, 1]) # p_xs: (3, 20, 100, 6, 32)
         que_x_1 = torch.unsqueeze(que_x, axis=-1) # que_x_1:(3, 20, 100, 6, 1)
+        # que_x_1 = torch.tile(torch.unsqueeze(que_x, axis=-1), [1, N, 1, 1, 1]) 
         
         z = torch.concat([p_xs, que_x_1], axis=-1) # z: (3, 20, 100, 6, 33)
         z = torch.transpose(z, 3, 2) # z: (3, 20, 6, 100, 33)
