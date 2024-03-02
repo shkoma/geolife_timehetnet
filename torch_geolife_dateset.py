@@ -110,13 +110,6 @@ class GeoLifeDataSet(Dataset):
 
         user_df = df_1.copy()
 
-        # idx_list = []
-        # for idx in range(df_1.shape[0]):
-        #     if idx % self.gap == 0: # gap==60 -> 5 mins
-        #         idx_list += [idx]
-        # user_df = df_1.iloc[idx_list, :].copy()
-        # print(f"user[{self.user_list[index]}]: {user_df.shape}")
-
         if user_df.shape[0] * 2 < self.length:
             print(f"user[{self.user_list[index]}]: not enough data")
             return (torch.from_numpy(samples).double(), torch.from_numpy(samples).double())
