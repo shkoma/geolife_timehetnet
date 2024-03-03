@@ -30,6 +30,9 @@ from torch_geolife_dateset import GeoLifeDataSet
 from data.geolife.convert_minmax_location import LocationPreprocessor
 
 ###########
+from torch_mlp import MLP
+from torch_segment_dataset import SegmentDataset
+###########
 # from experiment_test import run_experiment
 from args            import argument_parser
 from result_save     import *
@@ -60,7 +63,6 @@ def make_Tensorboard_dir(dir_name, dir_format):
     root_logdir = os.path.join(os.curdir, dir_name)
     sub_dir_name = datetime.datetime.now().strftime(dir_format)
     return os.path.join(root_logdir, sub_dir_name)
-# gc.enable()
 
 args = argument_parser()
 file_time = str(datetime.datetime.now()).replace(" ", "_")
@@ -71,9 +73,9 @@ else:
     name = args.name + "_" + file_time
 args.name = name
 
-print("########## argument sheet ########################################")
-for arg in vars(args):
-    print (f"#{arg:>15}  :  {str(getattr(args, arg))} ")
+# print("########## argument sheet ########################################")
+# for arg in vars(args):
+#     print (f"#{arg:>15}  :  {str(getattr(args, arg))} ")
     
 # torch args
 data_dir = "data/geolife/Data/"
@@ -178,9 +180,6 @@ validation_list = user_list[train_len-10:train_len-5]
 # validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):(train_len + validation_len + 10)]
 
-# ['068', '030', '085', '004', '067', '014', '050', '035', '013', '003', '039', '024', '036']
-# train_list      = ['030', '085', '003']#['067', '004', '014']#, '050', '035', '013', '003', '039', '024', '036', '085']
-# validation_list = [user_list[0]]
 train_list = user_list[1:6]
 validation_list = user_list[6:8]
 test_list       = user_list[6:8]
@@ -200,9 +199,6 @@ test_data       = GeoLifeDataSet(data_dir, test_list, sample_s, sample_q, length
 train_dataloader      = DataLoader(training_data, batch_size, shuffle=False)
 validation_dataloader = DataLoader(validation_data, batch_size, shuffle=False)
 test_dataloader       = DataLoader(test_data, batch_size, shuffle=False)
-
-# randomNumber = int(np.random.rand(1) * 10000000)
-# print("-------ID Number is:", randomNumber)
 
 def write_configruation(conf_file):
     #--------Write Configration--------

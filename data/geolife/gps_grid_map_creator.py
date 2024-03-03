@@ -12,7 +12,10 @@ class GPSGridMapCreator():
         self.num_lon = 0
         self.latitudes = []
         self.longitudes = []
-        
+    
+    def get_num_lat_lon(self):
+        return self.num_lat, self.num_lon
+
     def km_to_degrees(self, latitude, kilometers):
         # Earth's radius in kilometers
         earth_radius_km = 6371.0
