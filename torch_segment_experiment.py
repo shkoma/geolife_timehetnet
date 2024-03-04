@@ -42,7 +42,11 @@ device = torch.device("cuda:0" if use_cuda else "cpu")
 model_type = 'mlp'
 # model_type= 'time-hetnet'
 
-loss_method = 'mse'
+hidden_layer = 3
+cell = 256
+
+# loss_method = 'mse'
+loss_method = 'cross'
 
 min_length = 6
 time_delta = 10
@@ -150,7 +154,7 @@ if is_train == True:
 
     #--------Define a Model
     if model_type == 'mlp':
-        model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, label_attribute=label_attribute)
+        model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, loss_fn=loss_method, label_attribute=label_attribute, cell=cell, hidden_layer=hidden_layer)
 
     elif model_type == 'time-hetnet':
         args = argument_parser()
@@ -164,7 +168,7 @@ if is_train == True:
                            length = length)
         
     else:
-        model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, label_attribute=label_attribute)
+        model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, loss_fn=loss_method, label_attribute=label_attribute, cell=cell, hidden_layer=hidden_layer)
 
     #--------Define Losses annd metrics----------------
     if loss_method == 'cross':
