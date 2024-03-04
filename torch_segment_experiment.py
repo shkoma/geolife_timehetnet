@@ -92,7 +92,7 @@ locationPreprocessor = LocationPreprocessor('data/geolife/')
 user_list = []
 for user in user_df['user_id'].to_list():
     user_list += [locationPreprocessor.getUserId(user)]
-# user_list = ["068"]#, "003", "004"]
+user_list = ["068"]#, "003", "004"]
 ##################################################
 
 ##### Train - Validation user list
@@ -103,9 +103,9 @@ train_list      = user_list[1:train_len-10]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):(train_len + validation_len + 10)]
 
-train_list = user_list[0:10]
-validation_list = user_list[10:16]
-test_list       = user_list[10:16]
+train_list = user_list
+validation_list = user_list
+test_list       = user_list
 ##################################################
 
 def write_configruation(conf_file):
