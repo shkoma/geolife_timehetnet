@@ -36,7 +36,7 @@ class SegmentDataset(Dataset):
         segment_info = segment_info.loc[segment_info['over_time_delta'] == True, :]
         segment_list = segment_info['segment'].to_list()
 
-        user_df = user_df.drop(columns=['datetime'])
+        user_df = user_df.drop(columns=['datetime', 'latitude', 'longitude'])
 
         if len(self.columns) < 1:
             # just for log
@@ -94,14 +94,21 @@ class SegmentDataset(Dataset):
         # df_1 = pd.concat([df_1, df[y_col]], axis=1)
 
         samples = self.sampleSet(df_1)
-        
+
+        # masking y_timestpe in task_X
+        task_X = samples.copy()
+        task_y = task_X[:, -self.y_timestep:, -self.label_attribute:].copy()
+
+        if self.y_timestep > 0:
+            task_X[:, -self.y_timestep:, -self.label_attribute:] = 0
+
         ## model 에 따라 task_X, task_y 의 형태가 다름
         if self.model_type == 'time-hetnet':
-            task_X = samples.copy()
-            task_y = task_X[:, -self.y_timestep:, -self.label_attribute:].copy()
+            # task_X = samples.copy()
+            # task_y = task_X[:, -self.y_timestep:, -self.label_attribute:].copy()
 
-            if self.y_timestep > 0:
-                task_X[:, -self.y_timestep:, -self.label_attribute:] = 0
+            # if self.y_timestep > 0:
+            #     task_X[:, -self.y_timestep:, -self.label_attribute:] = 0
             
             sup_x = np.array(task_X[:self.sample_s, :, :])
             sup_y = np.array(task_y[:self.sample_s, :, :])
@@ -118,7 +125,8 @@ class SegmentDataset(Dataset):
 
         else: ## mlp
             # task_X, task_y 준비
-            task_X = np.array(samples[:, :-self.y_timestep, :])
+            task_X = np.array(samples[:, :, :])
+            # task_X = np.array(samples[:, :-self.y_timestep, :])
             task_y = np.array(samples[:, -self.y_timestep:, -self.label_attribute:])
 
             task_X = torch.from_numpy(task_X).double().to(self.device)

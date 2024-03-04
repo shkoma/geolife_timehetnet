@@ -47,20 +47,20 @@ loss_method = 'mse'
 min_length = 6
 time_delta = 10
 length = min_length * time_delta
-y_timestep = min_length * 2
+y_timestep = min_length
 
-x_attribute = 17
+x_attribute = 15
 label_attribute = 2
 
-sample_s = 10
-sample_q = 10
+sample_s = 5
+sample_q = 5
 
-batch_size = 2
+batch_size = 5
 
 args_early_stopping = True
-args_epoch = 10000
+args_epoch = 100000
 args_lr = 0.001
-args_patience = 3
+args_patience = 5
 args_factor = 0.1
 
 train_size = 0.7
@@ -103,20 +103,24 @@ train_list      = user_list[1:train_len-10]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):(train_len + validation_len + 10)]
 
-train_list = user_list[0:5]
-validation_list = user_list[5:7]
-test_list       = user_list[5:7]
+train_list = user_list[0:10]
+validation_list = user_list[10:16]
+test_list       = user_list[10:16]
 ##################################################
 
 def write_configruation(conf_file):
     #--------Write Configration--------
     import pandas as pd
-    conf_df = pd.DataFrame({'label_attribute':[label_attribute],
+    conf_df = pd.DataFrame({'device':[device],
+                            'model_type':[model_type],
+                            'label_attribute':[label_attribute],
                             'user_list_file':[user_list_file],
                             'sample_s':[sample_s],
                             'sample_q':[sample_q],
                             'epoch':[args_epoch],
                             'patience':[args_patience],
+                            'x_attribute':[x_attribute],
+                            'time_delta':[time_delta],
                             'y_timestep':[y_timestep],
                             'length':[length],
                             'train_list':[train_list],
@@ -146,7 +150,7 @@ if is_train == True:
 
     #--------Define a Model
     if model_type == 'mlp':
-        model = MLP(input_shape=[(length-y_timestep), x_attribute], y_timestep = y_timestep, label_attribute=label_attribute)
+        model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, label_attribute=label_attribute)
 
     elif model_type == 'time-hetnet':
         args = argument_parser()
@@ -160,7 +164,7 @@ if is_train == True:
                            length = length)
         
     else:
-        model = MLP(input_shape=[(length-y_timestep), x_attribute], y_timestep = y_timestep, label_attribute=label_attribute)
+        model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, label_attribute=label_attribute)
 
     #--------Define Losses annd metrics----------------
     if loss_method == 'cross':
@@ -205,25 +209,26 @@ if is_train == True:
         with torch.no_grad():
             for val_idx, val_data in enumerate(validation_dataloader, 0):
                 X_val, y_val = val_data
-                val_outputs = model(X_val)                
-                val_loss = metricMenhattan(y_val, val_outputs)
+                val_outputs = model(X_val)     
+                # val_loss = metricMenhattan(y_val, val_outputs)
+                val_loss = criterion(y_val, val_outputs)
                 loss_val += val_loss.item()
             writer.add_scalar('validation loss', loss_val, epoch)
             print(f"train loss: {loss_train}, validation loss: {loss_val}")
             lr_scheduler.step(loss_val)
 
-    if loss_val < best_val_loss:
-        best_val_loss = loss_val
-        no_improvement = 0
-        print('save best weight and bias')
-        torch.save(model.state_dict(), best_model_path)
-    else:
-        no_improvement += 1
-    
-    if loss_train < best_train_loss:
-        best_train_loss = loss_train
-        print('save best train model')
-        torch.save(model.state_dict(), best_train_model)
+        if loss_val < best_val_loss:
+            best_val_loss = loss_val
+            no_improvement = 0
+            print('save best weight and bias')
+            torch.save(model.state_dict(), best_model_path)
+        else:
+            no_improvement += 1
+        
+        if loss_train < best_train_loss:
+            best_train_loss = loss_train
+            print('save best train model')
+            torch.save(model.state_dict(), best_train_model)
 
 print('Finish Train')
 # 예측
