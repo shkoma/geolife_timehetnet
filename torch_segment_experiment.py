@@ -35,7 +35,7 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:1" if use_cuda else "cpu")
+device = torch.device("cuda:0" if use_cuda else "cpu")
 ##################################################
 
 ##### args
