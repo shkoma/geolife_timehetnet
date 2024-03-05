@@ -63,7 +63,8 @@ class GPSGridMapCreator():
 
         # Create a 2D grid for numbering
         self.grid_numbers = np.arange(0, (self.num_lat + 1) * (self.num_lon + 1)).reshape(self.num_lat + 1, self.num_lon + 1)
-        # print(f"gird_number: {self.grid_numbers.shape[0] * self.grid_numbers.shape[1]}")
+        print(f"grid_shape: {self.grid_numbers.shape}")
+        print(f"gird_number: {self.grid_numbers.shape[0] * self.grid_numbers.shape[1]}")
 
     def find_grid_number(self, lat, lon):
         # grid_lat = int(np.abs(lat - self.lat1) / np.abs(self.lat_degrees))

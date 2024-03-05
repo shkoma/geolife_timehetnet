@@ -34,7 +34,8 @@ class GeoLifeDataSet(Dataset):
         self.device = torch.device("cuda:0" if use_cuda else "cpu")
 
         # grid + original data
-        self.csv_file = '_origin_grid_1min.csv'
+        # self.csv_file = '_origin_grid_1min.csv'
+        self.csv_file = '_origin_grid_10s.csv'
 
     
     def get_train_columns(self):
@@ -94,6 +95,7 @@ class GeoLifeDataSet(Dataset):
         csv_path = str(self.data_dir) + str(self.user_list[index]) + self.csv_dir
         user_file = csv_path + self.user_list[index] + self.csv_file
         df = pd.read_csv(user_file)
+        df = df.drop(columns=['time_diff'])
         df_1 = df[df.columns[2:5].to_list()].copy()
         df_1 = pd.concat([df_1, df.iloc[:, 6:11]], axis=1) # ~ Hour + 100m
         # df_1 = pd.get_dummies(df_1, columns=['hour'], drop_first=True)

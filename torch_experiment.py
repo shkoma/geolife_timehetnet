@@ -38,7 +38,7 @@ from args            import argument_parser
 from result_save     import *
 ###########
 
-from sklearn.metrics import mean_squared_error as mse
+# from sklearn.metrics import mean_squared_error as mse
 
 # CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
@@ -111,8 +111,8 @@ batch_norm = False
 is_train = True
 best_model_path = 'best_model.pth'
 best_train_model = 'best_train_model.pth'
-user_list_file = 'grid_user_list.csv'
-
+# user_list_file = 'grid_user_list.csv'
+user_list_file = 'user_data_volumn.csv'
 ## Test Phase
 # is_train = False
 # log_folder = '[grid_100]_20240217-092132'

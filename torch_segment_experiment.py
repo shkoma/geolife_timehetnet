@@ -35,18 +35,18 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
+device = torch.device("cuda:1" if use_cuda else "cpu")
 ##################################################
 
 ##### args
-model_type = 'mlp'
-# model_type= 'time-hetnet'
+# model_type = 'mlp'
+model_type= 'time-hetnet'
 
 hidden_layer = 3
 cell = 256
 
-# loss_method = 'mse'
-loss_method = 'cross'
+loss_method = 'mse'
+# loss_method = 'cross'
 
 min_length = 6
 time_delta = 10
@@ -56,8 +56,8 @@ y_timestep = min_length
 x_attribute = 15
 label_attribute = 2
 
-sample_s = 5
-sample_q = 5
+sample_s = 10
+sample_q = 10
 
 batch_size = 5
 
@@ -68,7 +68,7 @@ args_patience = 5
 args_factor = 0.1
 
 train_size = 0.7
-validation_size = 0.1
+validation_size = 0.2
 ##################################################
 
 ##### dirs
@@ -90,26 +90,27 @@ best_train_model = 'best_train_model.pth'
 ##################################################
 
 ##### User List
-user_list_file = 'grid_user_list.csv'
+user_list_file = 'user_data_volumn.csv'#'grid_user_list.csv'
 user_df = pd.read_csv('data/geolife/' + user_list_file)
+user_df = user_df.loc[user_df['segment_list_10min'] >= (sample_s + sample_q), :]
 locationPreprocessor = LocationPreprocessor('data/geolife/')
 user_list = []
 for user in user_df['user_id'].to_list():
     user_list += [locationPreprocessor.getUserId(user)]
-user_list = ["068"]#, "003", "004"]
+# user_list = ["068"]#, "003", "004"]
 ##################################################
 
 ##### Train - Validation user list
 train_len       = (int)(len(user_list) * train_size)
 validation_len  = (int)(len(user_list) * validation_size)
 
-train_list      = user_list[1:train_len-10]
+train_list      = user_list[0:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
-test_list       = user_list[(train_len + validation_len):(train_len + validation_len + 10)]
+test_list       = user_list[(train_len + validation_len):]
 
-train_list = user_list
-validation_list = user_list
-test_list       = user_list
+# train_list = user_list[0:10]
+# validation_list = user_list[10:15]
+# test_list       = user_list[0:1]
 ##################################################
 
 def write_configruation(conf_file):
@@ -135,6 +136,11 @@ def write_configruation(conf_file):
 
 print("##################################################################")
 print(f"use_cuda: {use_cuda}, device: {device}")
+
+print(f"train len: {train_len}")
+print(f"validation len: {validation_len}")
+print(f"test len: {len(test_list)}")
+
 print("Building Network ...")
 
 # Dataset
@@ -199,7 +205,8 @@ if is_train == True:
             task_X, task_y = train_data
             optimizer.zero_grad()
             output = model(task_X)
-            loss = criterion(output, task_y)
+            # loss = criterion(output, task_y)
+            loss = metricMenhattan(output, task_y)
             loss.backward()
             optimizer.step()
             loss_train += loss.item()
@@ -214,8 +221,8 @@ if is_train == True:
             for val_idx, val_data in enumerate(validation_dataloader, 0):
                 X_val, y_val = val_data
                 val_outputs = model(X_val)     
-                # val_loss = metricMenhattan(y_val, val_outputs)
-                val_loss = criterion(y_val, val_outputs)
+                val_loss = metricMenhattan(y_val, val_outputs)
+                # val_loss = criterion(y_val, val_outputs)
                 loss_val += val_loss.item()
             writer.add_scalar('validation loss', loss_val, epoch)
             print(f"train loss: {loss_train}, validation loss: {loss_val}")
