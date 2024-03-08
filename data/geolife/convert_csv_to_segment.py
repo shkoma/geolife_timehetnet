@@ -26,7 +26,7 @@ gap = 10
 round_min = str(gap) + 'min'
 round_sec = str(gap) + 's'
 
-time_delta = 10
+time_delta = 60
 segment_delta = str(time_delta) + 'min'
 
 lat1, lon1 = 39.975300, 116.452488  # Lower-left corner
@@ -39,12 +39,14 @@ grid_csv = '_origin_grid_' + round_sec + '.csv'
 segment_csv = '_segment_list_' + segment_delta + '.csv'
 grid_list = [50, 100, 500, 1000, 1500, 2000, 3000]
 
+user_id_list = []
 df_len_list = []
 seg_list = []
 
 for id in valid_user_list['valid_user_list']:
     print(f"user_id: {id}")
     user_id = locationPreprocessor.getUserId(id)
+    user_id_list += [user_id]
     csv_file = './Data/' + user_id + '/csv/' + user_id + '.csv'
     segment_file = './Data/' + user_id + '/csv/' + user_id + segment_csv
     grid_file = './Data/' + user_id + '/csv/' + user_id + grid_csv
@@ -104,20 +106,21 @@ for id in valid_user_list['valid_user_list']:
     user_df = user_df.drop(columns=['datetime', 'latitude', 'longitude'])
     user_df.to_csv(grid_file, index=False)
 
-segment_col = '_segment_list_' + segment_delta
-data_volumn_df = pd.DataFrame({'data_vol':df_len_list,
+segment_col = 'segment_list_' + segment_delta
+data_volumn_df = pd.DataFrame({'user_id':user_id_list,
+                               'data_vol':df_len_list,
                                segment_col:seg_list})
 data_volumn_df = data_volumn_df.sort_values(['data_vol'], ascending=False)
 data_volumn_df.to_csv('user_data_volumn.csv', index=False)
 
-# df = pd.read_csv('user_data_volumn.csv')
-# seg_list = []
-# for id in df['user_id']:
-#     print(f"user_id: {id}")
-#     user_id = getUserId(id)
-#     segment_file = './Data/' + user_id + '/csv/' + user_id + segment_csv
-#     seg_df = pd.read_csv(segment_file)
-#     seg_list += [seg_df.shape[0]]
+df = pd.read_csv('user_data_volumn.csv')
+seg_list = []
+for id in df['user_id']:
+    print(f"user_id: {id}")
+    user_id = getUserId(id)
+    segment_file = './Data/' + user_id + '/csv/' + user_id + segment_csv
+    seg_df = pd.read_csv(segment_file)
+    seg_list += [seg_df.shape[0]]
     
-# df['segment_list_10min'] = seg_list
-# df.to_csv('user_data_volumn.csv', index=False)
+df[segment_col] = seg_list
+df.to_csv('user_data_volumn.csv', index=False)

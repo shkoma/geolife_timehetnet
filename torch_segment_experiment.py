@@ -17,6 +17,7 @@ from data.geolife.convert_minmax_location import LocationPreprocessor
 
 from args            import argument_parser
 from torch_time_het import TimeHetNet
+from torch_hetnet import HetNet
 
 def metricMenhattan(y_true, y_pred):
     row = torch.abs(y_pred[:,:,:,0] - y_true[:,:,:,0])
@@ -35,25 +36,29 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
+device = torch.device("cuda:2" if use_cuda else "cpu")
 ##################################################
 
 ##### args
-# model_type = 'mlp'
-model_type= 'time-hetnet'
+model_type = 'mlp'
+# model_type= 'time-hetnet'
+# model_type = 'hetnet'
 
-hidden_layer = 3
+args_dims = "[256, 256, 256]"
+
+hidden_layer = 4
 cell = 256
 
 loss_method = 'mse'
 # loss_method = 'cross'
 
+round_sec = 10 # (seconds) per 10s
 min_length = 6
-time_delta = 10
+time_delta = 20 # (minutes) 1 segment length
 length = min_length * time_delta
 y_timestep = min_length
 
-x_attribute = 15
+x_attribute = 12
 label_attribute = 2
 
 sample_s = 10
@@ -91,8 +96,9 @@ best_train_model = 'best_train_model.pth'
 
 ##### User List
 user_list_file = 'user_data_volumn.csv'#'grid_user_list.csv'
+segment_col = 'segment_list_' + str(time_delta) + 'min'
 user_df = pd.read_csv('data/geolife/' + user_list_file)
-user_df = user_df.loc[user_df['segment_list_10min'] >= (sample_s + sample_q), :]
+user_df = user_df.loc[user_df[segment_col] >= (sample_s + sample_q), :]
 locationPreprocessor = LocationPreprocessor('data/geolife/')
 user_list = []
 for user in user_df['user_id'].to_list():
@@ -125,6 +131,7 @@ def write_configruation(conf_file):
                             'epoch':[args_epoch],
                             'patience':[args_patience],
                             'x_attribute':[x_attribute],
+                            'round_sec':[round_sec],
                             'time_delta':[time_delta],
                             'y_timestep':[y_timestep],
                             'length':[length],
@@ -136,6 +143,7 @@ def write_configruation(conf_file):
 
 print("##################################################################")
 print(f"use_cuda: {use_cuda}, device: {device}")
+print(f"model_type: {model_type}")
 
 print(f"train len: {train_len}")
 print(f"validation len: {validation_len}")
@@ -144,8 +152,8 @@ print(f"test len: {len(test_list)}")
 print("Building Network ...")
 
 # Dataset
-training_data           = SegmentDataset(model_type, data_dir, train_list, device, time_delta, y_timestep, length, label_attribute, sample_s, sample_q)
-validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, time_delta, y_timestep, length, label_attribute, sample_s, sample_q)
+training_data           = SegmentDataset(model_type, data_dir, train_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q)
+validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q)
 train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
 validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
 
@@ -162,6 +170,15 @@ if is_train == True:
     if model_type == 'mlp':
         model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, loss_fn=loss_method, label_attribute=label_attribute, cell=cell, hidden_layer=hidden_layer)
 
+    elif model_type == 'hetnet':
+        args = argument_parser()
+        model = HetNet(dims = ast.literal_eval(args.dims),
+                       output_shape=[y_timestep, label_attribute],
+                       acti ='relu',
+                       drop1 = 0.01,
+                       drop2 = 0.01,
+                       share_qs = False)
+        print("Using Hetnet")
     elif model_type == 'time-hetnet':
         args = argument_parser()
         model = TimeHetNet(dims_inf = ast.literal_eval(args.dims),

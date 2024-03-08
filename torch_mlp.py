@@ -13,7 +13,7 @@ class MLP(nn.Module):
         self.loss_fn = loss_fn
         self.cell = cell
         self.hidden_layer = hidden_layer
-        self.fc_list= self.getSequential()
+        self.fc_list = self.getSequential()
     
     def getSequential(self):
         final_list = []
@@ -25,9 +25,6 @@ class MLP(nn.Module):
             final_list.append(nn.LeakyReLU(negative_slope=0.1))
 
         final_list.append(nn.Linear(self.cell, self.output_shape, dtype=torch.double))
-        # if self.loss_fn == 'cross':
-        #     final_list.append(nn.Softmax(dim=1))
-        # final_list.append(nn.LeakyReLU(negative_slope=0.1))
         return nn.Sequential(*final_list)
 
     def forward(self, x):

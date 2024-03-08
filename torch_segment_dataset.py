@@ -6,11 +6,13 @@ import torch
 from torch.utils.data import Dataset
 
 class SegmentDataset(Dataset):
-    def __init__(self, model_type, data_dir, user_list, device, time_delta, y_timestep, length, label_attribute, sample_s, sample_q):
+    def __init__(self,
+                 model_type, data_dir, user_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q):
         self.model_type = model_type
         self.data_dir = data_dir
         self.user_list = user_list
         self.device = device
+        self.round_sec = round_sec
         self.time_delta = time_delta
         self.y_timestep = y_timestep
         self.length = length
@@ -19,8 +21,8 @@ class SegmentDataset(Dataset):
         self.sample_q = sample_q
         self.columns = []
 
-        self.csv_file = '_origin_grid_10s.csv'
-        self.segment_file = '_segment_list_10min.csv'
+        self.csv_file = '_origin_grid_' + str(self.round_sec) + 's.csv'
+        self.segment_file = '_segment_list_' + str(self.time_delta) +'min.csv'
     
     def get_train_columns(self):
         return self.columns
@@ -81,15 +83,15 @@ class SegmentDataset(Dataset):
         # columns = ['datetime','latitude','longitude','days','segment']
         # df_1 = df[columns].copy()
         # df_1 = df[df.columns[0:13].to_list()].copy()
-        df_1 = df[df.columns[0:10].to_list()].copy()
+        df_1 = df[df.columns[3:10].to_list()].copy()
         # df_1 = pd.concat([df_1, df.iloc[:, 6:13]], axis=1) # ~ Hour + 100m
         # df_1 = pd.get_dummies(df_1, columns=['hour'], drop_first=True)
 
         # x_attribute = 9
         # df_1 = pd.concat([df_1, df.iloc[:, 18:]], axis=1) # 2, 3000m
-        df_1 = pd.concat([df_1, df.iloc[:, 16:18]], axis=1) # 1000m
         df_1 = pd.concat([df_1, df.iloc[:, 14:16]], axis=1) # 500m
         df_1 = pd.concat([df_1, df.iloc[:, 12:14]], axis=1) # 100m
+        df_1 = pd.concat([df_1, df.iloc[:, 16:18]], axis=1)  # 1000m
         # df_1 = pd.concat([df_1, df.iloc[:, 10:12]], axis=1) # 50m
 
         samples = self.sampleSet(df_1, index)
@@ -102,7 +104,7 @@ class SegmentDataset(Dataset):
             task_X[:, -self.y_timestep:, -self.label_attribute:] = 0
 
         ## model 에 따라 task_X, task_y 의 형태가 다름
-        if self.model_type == 'time-hetnet':
+        if self.model_type == 'time-hetnet' or self.model_type == 'hetnet':
             # task_X = samples.copy()
             # task_y = task_X[:, -self.y_timestep:, -self.label_attribute:].copy()
 
@@ -128,8 +130,10 @@ class SegmentDataset(Dataset):
             # task_X = np.array(samples[:, :-self.y_timestep, :])
             task_y = np.array(samples[:, -self.y_timestep:, -self.label_attribute:])
 
-            task_X = torch.from_numpy(task_X).double().to(self.device)
-            task_y = torch.from_numpy(task_y).double().to(self.device)
+            task_X = torch.tensor(task_X, dtype=torch.double).to(self.device)
+            task_y = torch.tensor(task_y, dtype=torch.double).to(self.device)
+            # task_X = torch.from_numpy(task_X).double().to(self.device)
+            # task_y = torch.from_numpy(task_y).double().to(self.device)
 
         return task_X, task_y
     
