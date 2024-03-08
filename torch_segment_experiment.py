@@ -12,12 +12,18 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from torch_mlp import MLP
+from torch_mlp_dataset import MlpDataset
 from torch_segment_dataset import SegmentDataset
 from data.geolife.convert_minmax_location import LocationPreprocessor
 
 from args            import argument_parser
 from torch_time_het import TimeHetNet
 from torch_hetnet import HetNet
+
+def mlp_metricMenhattan(y_true, y_pred):
+    row = torch.abs(y_pred[:,:,0] - y_true[:,:,0])
+    col = torch.abs(y_pred[:,:,1] - y_true[:,:,1])
+    return torch.mean(row + col)
 
 def metricMenhattan(y_true, y_pred):
     row = torch.abs(y_pred[:,:,:,0] - y_true[:,:,:,0])
@@ -46,7 +52,7 @@ model_type = 'mlp'
 
 args_dims = "[256, 256, 256]"
 
-hidden_layer = 4
+hidden_layer = 5
 cell = 256
 
 loss_method = 'mse'
@@ -58,13 +64,13 @@ time_delta = 20 # (minutes) 1 segment length
 length = min_length * time_delta
 y_timestep = min_length
 
-x_attribute = 15
+x_attribute = 16
 label_attribute = 2
 
 sample_s = 10
 sample_q = 10
 
-batch_size = 5
+batch_size = 20
 
 args_early_stopping = True
 args_epoch = 100000
@@ -114,9 +120,9 @@ train_list      = user_list[0:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):]
 
-# train_list = user_list[0:10]
-# validation_list = user_list[10:15]
-# test_list       = user_list[0:1]
+train_list = user_list[0:1]
+validation_list = user_list[0:1]
+test_list       = user_list[0:1]
 ##################################################
 
 def write_configruation(conf_file):
@@ -124,6 +130,7 @@ def write_configruation(conf_file):
     import pandas as pd
     conf_df = pd.DataFrame({'device':[device],
                             'model_type':[model_type],
+                            'batch_size':[batch_size],
                             'label_attribute':[label_attribute],
                             'user_list_file':[user_list_file],
                             'sample_s':[sample_s],
@@ -152,10 +159,16 @@ print(f"test len: {len(test_list)}")
 print("Building Network ...")
 
 # Dataset
-training_data           = SegmentDataset(model_type, data_dir, train_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q)
-validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q)
-train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
-validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
+if model_type == 'mlp':
+    training_data           = MlpDataset(data_dir, train_list, y_timestep, round_sec, time_delta, label_attribute, length, device)
+    validation_data         = MlpDataset(data_dir, validation_list, y_timestep, round_sec, time_delta, label_attribute, length, device)
+    train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
+    validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
+else:
+    training_data           = SegmentDataset(model_type, data_dir, train_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q)
+    validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q)
+    train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
+    validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
 
 if is_train == True:
     print('Start Train')
@@ -194,10 +207,15 @@ if is_train == True:
         model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, loss_fn=loss_method, label_attribute=label_attribute, cell=cell, hidden_layer=hidden_layer)
 
     #--------Define Losses annd metrics----------------
-    if loss_method == 'cross':
-        criterion = nn.CrossEntropyLoss()
+    # if loss_method == 'cross':
+    #     criterion = nn.CrossEntropyLoss()
+    # else:
+    #     criterion = nn.MSELoss()
+
+    if model_type == 'mlp':
+        criterion = mlp_metricMenhattan
     else:
-        criterion = nn.MSELoss()
+        criterion = metricMenhattan
     optimizer = optim.Adam(model.parameters(), lr=args_lr)
 
     #--------Define Callbacks----------------
@@ -222,8 +240,7 @@ if is_train == True:
             task_X, task_y = train_data
             optimizer.zero_grad()
             output = model(task_X)
-            # loss = criterion(output, task_y)
-            loss = metricMenhattan(output, task_y)
+            loss = criterion(output, task_y)
             loss.backward()
             optimizer.step()
             loss_train += loss.item()
@@ -238,8 +255,7 @@ if is_train == True:
             for val_idx, val_data in enumerate(validation_dataloader, 0):
                 X_val, y_val = val_data
                 val_outputs = model(X_val)     
-                val_loss = metricMenhattan(y_val, val_outputs)
-                # val_loss = criterion(y_val, val_outputs)
+                val_loss = criterion(y_val, val_outputs)
                 loss_val += val_loss.item()
             writer.add_scalar('validation loss', loss_val, epoch)
             print(f"train loss: {loss_train}, validation loss: {loss_val}")

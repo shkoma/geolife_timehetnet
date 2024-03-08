@@ -5,7 +5,6 @@ import torch.nn as nn
 class MLP(nn.Module):
     def __init__(self, input_shape, y_timestep, label_attribute, loss_fn, cell=256, hidden_layer=2):
         super(MLP, self).__init__()
-        
         self.input_shape = input_shape[-2] * input_shape[-1]
         self.y_timestep = y_timestep
         self.label_attribute = label_attribute
@@ -29,15 +28,14 @@ class MLP(nn.Module):
 
     def forward(self, x):
         batch = torch._shape_as_tensor(x)[0]
-        mini_batch = torch._shape_as_tensor(x)[1]
-        time_step = torch._shape_as_tensor(x)[2]
-        attribute = torch._shape_as_tensor(x)[3]
+        time_step = torch._shape_as_tensor(x)[1]
+        attribute = torch._shape_as_tensor(x)[2]
 
         in_shape_new = [-1] + [time_step * attribute]
         x = torch.reshape(x, in_shape_new)
 
         x  = self.fc_list(x)
         
-        out_shape_new = [batch] + [-1] + [self.y_timestep] + [self.label_attribute]
+        out_shape_new = [batch] + [self.y_timestep] + [self.label_attribute]
         out = torch.reshape(x, out_shape_new)
         return out

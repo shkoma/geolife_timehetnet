@@ -6,8 +6,7 @@ import torch
 from torch.utils.data import Dataset
 
 class SegmentDataset(Dataset):
-    def __init__(self,
-                 model_type, data_dir, user_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q):
+    def __init__(self, model_type, data_dir, user_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q):
         self.model_type = model_type
         self.data_dir = data_dir
         self.user_list = user_list
@@ -86,12 +85,6 @@ class SegmentDataset(Dataset):
 
         ## model 에 따라 task_X, task_y 의 형태가 다름
         if self.model_type == 'time-hetnet' or self.model_type == 'hetnet':
-            # task_X = samples.copy()
-            # task_y = task_X[:, -self.y_timestep:, -self.label_attribute:].copy()
-
-            # if self.y_timestep > 0:
-            #     task_X[:, -self.y_timestep:, -self.label_attribute:] = 0
-            
             sup_x = np.array(task_X[:self.sample_s, :, :])
             sup_y = np.array(task_y[:self.sample_s, :, :])
             que_x = np.array(task_X[self.sample_s:, :, :])
@@ -108,13 +101,12 @@ class SegmentDataset(Dataset):
         else: ## mlp
             # task_X, task_y 준비
             task_X = np.array(samples[:, :, :])
-            # task_X = np.array(samples[:, :-self.y_timestep, :])
             task_y = np.array(samples[:, -self.y_timestep:, -self.label_attribute:])
 
-            task_X = torch.tensor(task_X, dtype=torch.double).to(self.device)
-            task_y = torch.tensor(task_y, dtype=torch.double).to(self.device)
-            # task_X = torch.from_numpy(task_X).double().to(self.device)
-            # task_y = torch.from_numpy(task_y).double().to(self.device)
+            # task_X = torch.tensor(task_X, dtype=torch.double).to(self.device)
+            # task_y = torch.tensor(task_y, dtype=torch.double).to(self.device)
+            task_X = torch.from_numpy(task_X).double().to(self.device)
+            task_y = torch.from_numpy(task_y).double().to(self.device)
 
         return task_X, task_y
     
