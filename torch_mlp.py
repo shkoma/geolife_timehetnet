@@ -18,10 +18,16 @@ class MLP(nn.Module):
         final_list = []
         final_list.append(nn.Linear(self.input_shape, self.cell, dtype=torch.double))
         final_list.append(nn.LeakyReLU(negative_slope=0.1))
+        # final_list.append(nn.ReLU(inplace=True))
+        # final_list.append(nn.BatchNorm1d(self.cell))
+        # final_list.append(nn.Dropout(0.1))
 
         for _ in range(self.hidden_layer):
             final_list.append(nn.Linear(self.cell, self.cell, dtype=torch.double))
             final_list.append(nn.LeakyReLU(negative_slope=0.1))
+            # final_list.append(nn.ReLU(inplace=True))
+            # final_list.append(nn.BatchNorm1d(self.cell))
+            # final_list.append(nn.Dropout(0.1))
 
         final_list.append(nn.Linear(self.cell, self.output_shape, dtype=torch.double))
         return nn.Sequential(*final_list)

@@ -244,7 +244,9 @@ if is_train == True:
             loss.backward()
             optimizer.step()
             loss_train += loss.item()
-        writer.add_scalar('training loss', loss_train, epoch)
+
+        if epoch % 100 == 1:
+            writer.add_scalar('training loss', loss_train, epoch)
 
         model.eval()
         if epoch == 0:
@@ -257,7 +259,9 @@ if is_train == True:
                 val_outputs = model(X_val)     
                 val_loss = criterion(y_val, val_outputs)
                 loss_val += val_loss.item()
-            writer.add_scalar('validation loss', loss_val, epoch)
+
+            if epoch % 100 == 1:
+                writer.add_scalar('validation loss', loss_val, epoch)
             print(f"train loss: {loss_train}, validation loss: {loss_val}")
             lr_scheduler.step(loss_val)
 
