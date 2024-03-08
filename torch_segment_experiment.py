@@ -58,7 +58,7 @@ time_delta = 20 # (minutes) 1 segment length
 length = min_length * time_delta
 y_timestep = min_length
 
-x_attribute = 12
+x_attribute = 15
 label_attribute = 2
 
 sample_s = 10
