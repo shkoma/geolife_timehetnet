@@ -47,7 +47,7 @@ device = torch.device("cuda:0" if use_cuda else "cpu")
 
 ##### args
 model_type = 'mlp'
-# model_type= 'time-hetnet'
+model_type = 'time-hetnet'
 # model_type = 'hetnet'
 
 args_dims = "[256, 256, 256]"
@@ -70,7 +70,7 @@ label_attribute = 2
 sample_s = 10
 sample_q = 10
 
-batch_size = 1000
+batch_size = 3
 
 args_early_stopping = True
 args_epoch = 10000000
@@ -120,7 +120,7 @@ train_list      = user_list[0:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):]
 
-train_list = user_list[0:1]
+train_list = user_list[0:4]
 validation_list = user_list[0:1]
 test_list       = user_list[0:1]
 ##################################################
@@ -156,6 +156,10 @@ print(f"model_type: {model_type}")
 print(f"train len: {train_len}")
 print(f"validation len: {validation_len}")
 print(f"test len: {len(test_list)}")
+
+print(f"train: [{train_list}]")
+print(f"validation: [{validation_list}]")
+print(f"test: [{test_list}]")
 
 print("Building Network ...")
 

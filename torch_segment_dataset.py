@@ -22,13 +22,33 @@ class SegmentDataset(Dataset):
 
         self.csv_file = '_origin_grid_' + str(self.round_sec) + 's.csv'
         self.segment_file = '_segment_list_' + str(self.time_delta) +'min.csv'
+
+        self.user_data_list = self.loadUserData()
+
     
     def get_train_columns(self):
         return self.columns
 
-    def sampleSet(self, dataset, index):
+    def loadUserData(self):
+        user_data_list = []
+
+        day_column = 10
+        for user_id in self.user_list:
+            csv_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.csv_file
+            df = pd.read_csv(csv_file)
+            df = df.drop(columns=['time_diff'])
+            
+            df_1 = df[df.columns[0:day_column].to_list()].copy()
+            df_1 = pd.concat([df_1, df.iloc[:, day_column+4:day_column+6]], axis=1)  # 500m
+            df_1 = pd.concat([df_1, df.iloc[:, day_column+2:day_column+4]], axis=1)  # 100m
+            df_1 = pd.concat([df_1, df.iloc[:, day_column+6:day_column+8]], axis=1)  # 1000m
+
+            user_data_list.append(self.sampleSet(df_1, user_id))
+        return user_data_list
+
+    def sampleSet(self, dataset, user_id):
         user_df = dataset.copy()
-        segment_df = pd.read_csv(str(self.data_dir) + str(self.user_list[index]) + '/csv/' + str(self.user_list[index]) + self.segment_file)
+        segment_df = pd.read_csv(str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.segment_file)
         segment_list = segment_df['segment_list'].to_list()
 
         if len(self.columns) < 1:
@@ -63,21 +83,8 @@ class SegmentDataset(Dataset):
         return np.array(mini_batch)
     
     def __getitem__(self, index):
-        csv_file = str(self.data_dir) + str(self.user_list[index]) + '/csv/' + str(self.user_list[index]) + self.csv_file
-        df = pd.read_csv(csv_file)
-        df = df.drop(columns=['time_diff'])
-
-        df_1 = df[df.columns[0:10].to_list()].copy()
-        # df_1 = pd.concat([df_1, df.iloc[:, 18:]], axis=1) # 2, 3000m
-        df_1 = pd.concat([df_1, df.iloc[:, 14:16]], axis=1) # 500m
-        df_1 = pd.concat([df_1, df.iloc[:, 12:14]], axis=1) # 100m
-        df_1 = pd.concat([df_1, df.iloc[:, 16:18]], axis=1)  # 1000m
-        # df_1 = pd.concat([df_1, df.iloc[:, 10:12]], axis=1) # 50m
-
-        samples = self.sampleSet(df_1, index)
-
         # masking y_timestpe in task_X
-        task_X = samples.copy()
+        task_X = self.user_data_list[index].copy()
         task_y = task_X[:, -self.y_timestep:, -self.label_attribute:].copy()
 
         if self.y_timestep > 0:
@@ -100,6 +107,7 @@ class SegmentDataset(Dataset):
 
         else: ## mlp
             # task_X, task_y 준비
+            samples = self.user_data_list[index].copy()
             task_X = np.array(samples[:, :, :])
             task_y = np.array(samples[:, -self.y_timestep:, -self.label_attribute:])
 
@@ -114,4 +122,4 @@ class SegmentDataset(Dataset):
         # batch를 구성할 수 있는 총 수
         # 이 수에서 batch를 조정할 수 있다.
         # 몇 명의 user 로 나눠서 할 지
-        return len(self.user_list)
+        return len(self.user_data_list)

@@ -26,7 +26,7 @@ gap = 10
 round_min = str(gap) + 'min'
 round_sec = str(gap) + 's'
 
-time_delta = 60
+time_delta = 20
 segment_delta = str(time_delta) + 'min'
 
 lat1, lon1 = 39.975300, 116.452488  # Lower-left corner
@@ -107,11 +107,11 @@ for id in valid_user_list['valid_user_list']:
     user_df.to_csv(grid_file, index=False)
 
 segment_col = 'segment_list_' + segment_delta
-data_volumn_df = pd.DataFrame({'user_id':user_id_list,
-                               'data_vol':df_len_list,
-                               segment_col:seg_list})
-data_volumn_df = data_volumn_df.sort_values(['data_vol'], ascending=False)
-data_volumn_df.to_csv('user_data_volumn.csv', index=False)
+# data_volumn_df = pd.DataFrame({'user_id':user_id_list,
+#                                'data_vol':df_len_list,
+#                                segment_col:seg_list})
+# data_volumn_df = data_volumn_df.sort_values(['data_vol'], ascending=False)
+# data_volumn_df.to_csv('user_data_volumn.csv', index=False)
 
 df = pd.read_csv('user_data_volumn.csv')
 seg_list = []

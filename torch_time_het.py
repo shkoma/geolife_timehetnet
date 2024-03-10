@@ -401,23 +401,31 @@ class TimeHetNet(nn.Module):
         # u_ys: (5, 10, 6, 2, 256)
         u_ys = torch.mean(u_ys, axis=2)
         # u_ys: (5, 10, 2, 256)
+
         u_ys = torch.unsqueeze(u_ys, 2)
         # u_ys: (5, 10, 1, 2, 256)
+
         u_ys = torch.tile(u_ys, [1,1,T,1,1])
-        # u_ys: (5, 10, 120, 2, 256)
+        # u_ys: (5, 10, 120, 256)
 
         u_xs = torch.tile(torch.unsqueeze(u_xs, axis=-2), [1,1,1,u_ys.shape[-2], 1])
         # u_xs:(5, 10, 120, 2, 256)
 
         u_s  = u_xs + u_ys
         # u_s:(5, 10, 120, 2, 256)
-        # u_s = self.time_ug(u_s)    # Conv-Gu
+
+        u_s = self.time_ug(u_s)    # Conv-Gu
         # u_s:(5, 10, 120, 2, 256)
 
+        u_in_x = torch.mean(u_s, axis=-2) #-> in_xs and in_ys
+        # u_in_x:(5, 10, 120, 256)
+        u_in_y = torch.mean(u_s, axis=2)
+        # u_in_y:(5, 10, 2, 256)
+
         #### Inference Network #### (DS over Instances)
-        in_xs = torch.tile(u_s, [1, 1, 1, int(F/u_s.shape[-2]), 1])
+        in_xs = torch.tile(torch.unsqueeze(u_in_x, axis=-2), [1, 1, 1, F, 1])
         # in_xs: (5, 10, 120, 12, 256)
-        in_xs = torch.concat([sup_x_1, in_xs], -1) 
+        in_xs = torch.concat([sup_x_1, in_xs], -1)
         # in_xs: (5, 10, 120, 12, 257)
         
         in_xs = torch.transpose(in_xs, 3, 2)
@@ -426,16 +434,14 @@ class TimeHetNet(nn.Module):
         # in_xs: (5, 10, 12, 120, 256)
         in_xs = torch.mean(in_xs, axis=1)
         # in_xs: (5, 12, 120, 256)
-        # in_xs = self.time_gv(in_xs) # gv
+        in_xs = self.time_gv(in_xs) # gv
         # in_xs: (5, 12, 120, 256)
         in_xs = torch.transpose(in_xs, 2, 1)
         # in_xs: (5, 120, 12, 256)
         
         # Label encoding
-        # u_s:(5, 10, 120, 2, 256)
-        in_ys = torch.mean(u_s, axis=2)
-        # in_ys:(5, 10, 2, 256)
-        in_ys = torch.unsqueeze(in_ys, axis=2)
+        # u_in_y:(5, 10, 2, 256)
+        in_ys = torch.unsqueeze(u_in_y, axis=2)
         # in_ys:(5, 10, 1, 2, 256)
         in_ys = torch.tile(in_ys, [1, 1, sup_y.shape[-2], 1, 1])
         # in_ys:(5, 10, 6, 2, 256)
