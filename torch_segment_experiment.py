@@ -42,7 +42,7 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:2" if use_cuda else "cpu")
+device = torch.device("cuda:0" if use_cuda else "cpu")
 ##################################################
 
 ##### args
@@ -70,12 +70,12 @@ label_attribute = 2
 sample_s = 10
 sample_q = 10
 
-batch_size = 20
+batch_size = 1000
 
 args_early_stopping = True
-args_epoch = 100000
+args_epoch = 10000000
 args_lr = 0.001
-args_patience = 5
+args_patience = 10
 args_factor = 0.1
 
 train_size = 0.7
@@ -131,6 +131,7 @@ def write_configruation(conf_file):
     conf_df = pd.DataFrame({'device':[device],
                             'model_type':[model_type],
                             'batch_size':[batch_size],
+                            'hidden_layer':[hidden_layer],
                             'label_attribute':[label_attribute],
                             'user_list_file':[user_list_file],
                             'sample_s':[sample_s],
