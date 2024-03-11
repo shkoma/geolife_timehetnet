@@ -33,19 +33,19 @@ class My_Conv1d(nn.Module):
         return x
     
 class ConvBlock(nn.Module):
-    def __init__(self, dims=[256,256,1],
+    def __init__(self, dims=[64,64,1],
                  input_shape=None,
                  activation=None,
                  name=None,
                  final=True,
                  batchnorm=False,
                  dilate=False,
-                 first_features=256):
+                 first_features=64):
         super(ConvBlock, self).__init__()
-        self.batchnorm = True #batchnorm
+        self.batchnorm = False #batchnorm
         self.final = final
         self.dilation = [1, 1, 1]
-        self.drop_out = True
+        self.drop_out = False
         self.p = 0.3
         
         # https://wikidocs.net/194947f
@@ -197,7 +197,7 @@ def getSequential(dims=[32, 32, 1], name=None, activation=None,
                 final_list.append(nn.Sigmoid())
     return nn.Sequential(*final_list)
 
-def getTimeBlock(block = 'conv', dims=[32, 32, 1], input_shape=None, activation=None, name=None, final=True, batchnorm=False, dilate=False, first_features=256):
+def getTimeBlock(block = 'conv', dims=[32, 32, 1], input_shape=None, activation=None, name=None, final=True, batchnorm=False, dilate=False, first_features=64):
     if block == 'conv':
         return ConvBlock(dims=dims,input_shape=input_shape,activation=activation,name=name,final=final,batchnorm=batchnorm,dilate=dilate, first_features=first_features)
     elif block == 'gru':
@@ -397,30 +397,31 @@ class TimeHetNet(nn.Module):
         # cs_bar: (5, 10, 6, 2, 256) # MxNx1xK
         u_ys = torch.concat([torch.unsqueeze(sup_y, axis=-1), cs_bar], axis=-1) 
         # u_ys: (5, 10, 6, 2, 257)
+        u_ys = torch.transpose(u_ys, 3, 2).contiguous()
         u_ys = self.dense_uf(u_ys)
-        # u_ys: (5, 10, 6, 2, 256)
+        # u_ys: (5, 10, 2, 6, 256)
         u_ys = torch.mean(u_ys, axis=2)
-        # u_ys: (5, 10, 2, 256)
+        # u_ys: (5, 10, 6, 256)
 
         u_ys = torch.unsqueeze(u_ys, 2)
-        # u_ys: (5, 10, 1, 2, 256)
+        # u_ys: (5, 10, 1, 6, 256)
 
         u_ys = torch.tile(u_ys, [1,1,T,1,1])
-        # u_ys: (5, 10, 120, 256)
+        # u_ys: (5, 10, 120, 6, 256)
 
         u_xs = torch.tile(torch.unsqueeze(u_xs, axis=-2), [1,1,1,u_ys.shape[-2], 1])
-        # u_xs:(5, 10, 120, 2, 256)
+        # u_xs:(5, 10, 120, 6, 256)
 
         u_s  = u_xs + u_ys
-        # u_s:(5, 10, 120, 2, 256)
+        # u_s:(5, 10, 120, 6, 256)
 
         u_s = self.time_ug(u_s)    # Conv-Gu
-        # u_s:(5, 10, 120, 2, 256)
+        # u_s:(5, 10, 120, 6, 256)
 
         u_in_x = torch.mean(u_s, axis=-2) #-> in_xs and in_ys
         # u_in_x:(5, 10, 120, 256)
         u_in_y = torch.mean(u_s, axis=2)
-        # u_in_y:(5, 10, 2, 256)
+        # u_in_y:(5, 10, 6, 256)
 
         #### Inference Network #### (DS over Instances)
         in_xs = torch.tile(torch.unsqueeze(u_in_x, axis=-2), [1, 1, 1, F, 1])
@@ -440,10 +441,10 @@ class TimeHetNet(nn.Module):
         # in_xs: (5, 120, 12, 256)
         
         # Label encoding
-        # u_in_y:(5, 10, 2, 256)
-        in_ys = torch.unsqueeze(u_in_y, axis=2)
-        # in_ys:(5, 10, 1, 2, 256)
-        in_ys = torch.tile(in_ys, [1, 1, sup_y.shape[-2], 1, 1])
+        # u_in_y:(5, 10, 6, 256)
+        in_ys = torch.unsqueeze(u_in_y, axis=-2)
+        # in_ys:(5, 10, 6, 1, 256)
+        in_ys = torch.tile(in_ys, [1, 1, 1, sup_y.shape[-1], 1])
         # in_ys:(5, 10, 6, 2, 256)
         sup_y_1 = torch.unsqueeze(sup_y, axis=-1)
         # sup_y_1:(5, 10, 6, 2, 1)

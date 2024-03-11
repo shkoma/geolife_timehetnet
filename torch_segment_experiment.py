@@ -42,7 +42,7 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
+device = torch.device("cuda:2" if use_cuda else "cpu")
 ##################################################
 
 ##### args
@@ -50,7 +50,7 @@ model_type = 'mlp'
 model_type = 'time-hetnet'
 # model_type = 'hetnet'
 
-args_dims = "[256, 256, 256]"
+args_dims = "[64, 64, 64]"
 
 hidden_layer = 5
 cell = 256
@@ -67,10 +67,10 @@ y_timestep = min_length
 x_attribute = 16
 label_attribute = 2
 
-sample_s = 10
-sample_q = 10
+sample_s = 30
+sample_q = 30
 
-batch_size = 3
+batch_size = 500
 
 args_early_stopping = True
 args_epoch = 10000000
@@ -120,7 +120,7 @@ train_list      = user_list[0:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):]
 
-train_list = user_list[0:4]
+train_list = user_list[0:1]
 validation_list = user_list[0:1]
 test_list       = user_list[0:1]
 ##################################################
@@ -218,9 +218,9 @@ if is_train == True:
     #     criterion = nn.MSELoss()
 
     if model_type == 'mlp':
-        criterion = mlp_metricMenhattan
+        criterion = nn.MSELoss()#mlp_metricMenhattan
     else:
-        criterion = metricMenhattan
+        criterion = nn.MSELoss()#metricMenhattan
     optimizer = optim.Adam(model.parameters(), lr=args_lr)
 
     #--------Define Callbacks----------------
