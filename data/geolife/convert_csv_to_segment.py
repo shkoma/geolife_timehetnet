@@ -89,7 +89,18 @@ for id in valid_user_list['valid_user_list']:
     segment_df = pd.DataFrame({'segment_list':segment_list})
     seg_list += [segment_df.shape[0]]
     segment_df.to_csv(segment_file, index=False)
-    
+
+    ## make data fully
+    begin = user_df['datetime'][0]
+    end = user_df['datetime'][user_df.shape[0]-1]
+
+    print(f'begin: {begin}')
+    print(f'end: {end}')
+
+    date_df = pd.DataFrame({'datetime':pd.date_range(begin, end, freq=round_min)})
+    user_df = pd.merge(date_df, user_df, how='outer', on='datetime')
+    user_df = user_df.fillna(np.nan)
+
     # grid process
     user_df = user_df.drop(columns=['altitude', 'what'])
     for grid_len in grid_list:

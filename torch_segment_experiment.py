@@ -23,17 +23,17 @@ from torch_hetnet import HetNet
 def mlp_metricMenhattan(y_true, y_pred):
     row = torch.abs(y_pred[:,:,0] - y_true[:,:,0])
     col = torch.abs(y_pred[:,:,1] - y_true[:,:,1])
-    return torch.mean(row + col)
+    return torch.sum(row + col)
 
 def metricMenhattan(y_true, y_pred):
     row = torch.abs(y_pred[:,:,:,0] - y_true[:,:,:,0])
     col = torch.abs(y_pred[:,:,:,1] - y_true[:,:,:,1])
-    return torch.mean(row + col)
+    return torch.sum(row + col)
 
 def metricEuclidean(y_true, y_pred):
     row = (y_pred[:,:,:,0] - y_true[:,:,:,0])**2
     col = (y_pred[:,:,:,1] - y_true[:,:,:,1])**2
-    return torch.mean((row + col)** 0.5)
+    return torch.sum((row + col)**0.5)
 
 def make_Tensorboard_dir(dir_name, dir_format):
     root_logdir = os.path.join(os.curdir, dir_name)
@@ -42,33 +42,40 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:2" if use_cuda else "cpu")
+device = torch.device("cuda:3" if use_cuda else "cpu")
 ##################################################
 
 ##### args
 model_type = 'mlp'
-model_type = 'time-hetnet'
+# model_type = 'time-hetnet'
 # model_type = 'hetnet'
+loss_method = 'euclidean'
+loss_method = 'mse'
 
 args_dims = "[64, 64, 64]"
 
 hidden_layer = 5
 cell = 256
 
-loss_method = 'mse'
-# loss_method = 'cross'
+# min
+round_min = 10
+day = 144 # 6*24
 
+# sec
 round_sec = 10 # (seconds) per 10s
 min_length = 6
 time_delta = 20 # (minutes) 1 segment length
-length = min_length * time_delta
-y_timestep = min_length
 
-x_attribute = 16
+file_mode = 'min'
+# length = min_length * time_delta
+length = day * 8 # 8 days
+y_timestep = day # 1 day (24 hours)
+
+x_attribute = 8
 label_attribute = 2
 
-sample_s = 30
-sample_q = 30
+sample_s = 10
+sample_q = 10
 
 batch_size = 500
 
@@ -130,6 +137,7 @@ def write_configruation(conf_file):
     import pandas as pd
     conf_df = pd.DataFrame({'device':[device],
                             'model_type':[model_type],
+                            'loss_method':[loss_method],
                             'batch_size':[batch_size],
                             'hidden_layer':[hidden_layer],
                             'label_attribute':[label_attribute],
@@ -139,6 +147,8 @@ def write_configruation(conf_file):
                             'epoch':[args_epoch],
                             'patience':[args_patience],
                             'x_attribute':[x_attribute],
+                            'file_mode':[file_mode],
+                            'round_min':[round_min],
                             'round_sec':[round_sec],
                             'time_delta':[time_delta],
                             'y_timestep':[y_timestep],
@@ -165,8 +175,8 @@ print("Building Network ...")
 
 # Dataset
 if model_type == 'mlp':
-    training_data           = MlpDataset(data_dir, train_list, y_timestep, round_sec, time_delta, label_attribute, length, device)
-    validation_data         = MlpDataset(data_dir, validation_list, y_timestep, round_sec, time_delta, label_attribute, length, device)
+    training_data           = MlpDataset(data_dir, train_list, y_timestep, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
+    validation_data         = MlpDataset(data_dir, validation_list, y_timestep, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
     train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
     validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
 else:
@@ -212,15 +222,12 @@ if is_train == True:
         model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, loss_fn=loss_method, label_attribute=label_attribute, cell=cell, hidden_layer=hidden_layer)
 
     #--------Define Losses annd metrics----------------
-    # if loss_method == 'cross':
-    #     criterion = nn.CrossEntropyLoss()
-    # else:
-    #     criterion = nn.MSELoss()
-
-    if model_type == 'mlp':
-        criterion = nn.MSELoss()#mlp_metricMenhattan
+    if loss_method == 'euclidean':
+        criterion = metricEuclidean
+    elif loss_method == 'menhattan':
+        criterion = metricMenhattan
     else:
-        criterion = nn.MSELoss()#metricMenhattan
+        criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=args_lr)
 
     #--------Define Callbacks----------------
@@ -245,10 +252,11 @@ if is_train == True:
             task_X, task_y = train_data
             optimizer.zero_grad()
             output = model(task_X)
-            loss = criterion(output, task_y)
+            loss = criterion(task_y, output)
+            loss_train += loss.item()
+
             loss.backward()
             optimizer.step()
-            loss_train += loss.item()
 
         if epoch % 100 == 1:
             writer.add_scalar('training loss', loss_train, epoch)

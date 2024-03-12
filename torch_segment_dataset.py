@@ -39,11 +39,13 @@ class SegmentDataset(Dataset):
             csv_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.csv_file
             df = pd.read_csv(csv_file)
             df = df.drop(columns=['time_diff'])
-            
+
             df_1 = df[df.columns[0:day_column].to_list()].copy()
             df_1 = pd.concat([df_1, df.iloc[:, day_column+4:day_column+6]], axis=1)  # 500m
             df_1 = pd.concat([df_1, df.iloc[:, day_column+2:day_column+4]], axis=1)  # 100m
             df_1 = pd.concat([df_1, df.iloc[:, day_column+6:day_column+8]], axis=1)  # 1000m
+            df_1 = df_1.drop(columns=['x', 'y'])
+            df_1 = pd.concat([df_1, df.iloc[:, 1:3]], axis=1)  # x, y
 
             if self.data_mode == 'full':
                 self.fullSampleSet(df_1, user_id)
@@ -109,6 +111,7 @@ class SegmentDataset(Dataset):
                 if len(segment_list) - count < total_samps:
                     return
             count += 1
+
             seg_df = user_df.loc[user_df['segment'] == seg_num, :]
             seg_df = seg_df.drop(columns=['segment'])
             if seg_df.shape[0] < self.length:
