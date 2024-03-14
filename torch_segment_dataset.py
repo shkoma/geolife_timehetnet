@@ -6,11 +6,12 @@ import torch
 from torch.utils.data import Dataset
 
 class SegmentDataset(Dataset):
-    def __init__(self, model_type, data_dir, user_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q):
+    def __init__(self, model_type, data_dir, user_list, device, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode='min'):
         self.model_type = model_type
         self.data_dir = data_dir
         self.user_list = user_list
         self.device = device
+        self.round_min = round_min
         self.round_sec = round_sec
         self.time_delta = time_delta
         self.y_timestep = y_timestep
@@ -18,39 +19,73 @@ class SegmentDataset(Dataset):
         self.label_attribute = label_attribute
         self.sample_s = sample_s
         self.sample_q = sample_q
+        self.file_mode = file_mode
         self.columns = []
 
-        self.csv_file = '_origin_grid_' + str(self.round_sec) + 's.csv'
-        self.segment_file = '_segment_list_' + str(self.time_delta) +'min.csv'
+        if self.file_mode == 'sec':
+            self.sec_csv = '_origin_grid_' + str(self.round_sec) + 's.csv'
+            self.segment_file = '_segment_list_' + str(self.time_delta) +'min.csv'
+        else:
+            # round_min
+            self.min_csv = '_origin_grid_' + str(self.round_min) + 'min.csv'
+            self.min_file = str(self.data_dir) + str(self.user_list[0]) + '/csv/' + str(
+                self.user_list[0]) + self.min_csv
 
         self.data_mode = 'full'
         self.user_data_list = []
-        self.full_user_data_list = []
+        self.full_user_data_list = [] # user together, in sec mode and min mode
         self.loadUserData()
 
     def get_train_columns(self):
         return self.columns
 
     def loadUserData(self):
-        user_data_list = []
-
-        day_column = 10
         for user_id in self.user_list:
-            csv_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.csv_file
-            df = pd.read_csv(csv_file)
-            df = df.drop(columns=['time_diff'])
+            if self.file_mode == 'sec':
+                csv_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.sec_csv
+                df = pd.read_csv(csv_file)
+                df = df.drop(columns=['time_diff'])
 
-            df_1 = df[df.columns[0:day_column].to_list()].copy()
-            df_1 = pd.concat([df_1, df.iloc[:, day_column+4:day_column+6]], axis=1)  # 500m
-            df_1 = pd.concat([df_1, df.iloc[:, day_column+2:day_column+4]], axis=1)  # 100m
-            df_1 = pd.concat([df_1, df.iloc[:, day_column+6:day_column+8]], axis=1)  # 1000m
-            df_1 = df_1.drop(columns=['x', 'y'])
-            df_1 = pd.concat([df_1, df.iloc[:, 1:3]], axis=1)  # x, y
+                day_column = 10
+                df_1 = df[df.columns[0:day_column].to_list()].copy()
+                df_1 = pd.concat([df_1, df.iloc[:, day_column+4:day_column+6]], axis=1)  # 500m
+                df_1 = pd.concat([df_1, df.iloc[:, day_column+2:day_column+4]], axis=1)  # 100m
+                df_1 = pd.concat([df_1, df.iloc[:, day_column+6:day_column+8]], axis=1)  # 1000m
+                df_1 = df_1.drop(columns=['x', 'y'])
+                df_1 = pd.concat([df_1, df.iloc[:, 1:3]], axis=1)  # x, y
+                self.columns = df_1.columns.to_list()
 
-            if self.data_mode == 'full':
-                self.fullSampleSet(df_1, user_id)
+                if self.data_mode == 'full':
+                    self.fullSampleSet(df_1, user_id)
+                else:
+                    self.user_data_list.append(self.sampleSet(df_1, user_id))
             else:
-                self.user_data_list.append(self.sampleSet(df_1, user_id))
+                # min
+                df = pd.read_csv(self.min_file)
+
+                df_1 = df[df.columns[3:-2].to_list()].copy()
+                df_1 = pd.concat([df_1, df.iloc[:, 1:3]], axis=1)  # x, y
+                self.columns = df_1.columns.to_list()
+                self.sampleMinSet(df_1)
+
+        return
+    def sampleMinSet(self, dataset):
+        user_df = dataset.copy()
+        total_samps = self.sample_s + self.sample_q
+
+        mini_batch = []
+        count = 0
+        user_length = int(user_df.shape[0] / self.length)
+        print(f"user_lenth: {user_length}")
+        for idx in range(0, user_length):
+            if count != 0 and count % total_samps == 0:
+                self.full_user_data_list.append(np.array(mini_batch))
+                mini_batch = []
+                if user_length - count < total_samps:
+                    return
+            count += 1
+            cur_sample = user_df.iloc[idx * self.length:(idx + 1) * self.length, :]
+            mini_batch.append(cur_sample)
         return
 
     def sampleSet(self, dataset, user_id):
@@ -128,10 +163,15 @@ class SegmentDataset(Dataset):
 
     def __getitem__(self, index):
         # masking y_timestpe in task_X
-        if self.data_mode == 'full':
-            task_X = self.full_user_data_list[index]
+        if self.file_mode == 'sec':
+            if self.data_mode == 'full':
+                task_X = self.full_user_data_list[index].copy()
+            else:
+                task_X = self.user_data_list[index].copy()
         else:
-            task_X = self.user_data_list[index]
+            # min
+            task_X = self.full_user_data_list[index].copy()
+
         task_y = task_X[:, -self.y_timestep:, -self.label_attribute:].copy()
 
         if self.y_timestep > 0:
@@ -156,8 +196,11 @@ class SegmentDataset(Dataset):
         # batch를 구성할 수 있는 총 수
         # 이 수에서 batch를 조정할 수 있다.
         # 몇 명의 user 로 나눠서 할 지
-        if self.data_mode == 'full':
+        if self.file_mode == 'sec':
+            if self.data_mode == 'full':
+                length = len(self.full_user_data_list)
+            else:
+                length = len(self.user_data_list)
+        else: # min
             length = len(self.full_user_data_list)
-        else:
-            length = len(self.user_data_list)
         return length

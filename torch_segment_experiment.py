@@ -42,17 +42,16 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:3" if use_cuda else "cpu")
+device = torch.device("cuda:2" if use_cuda else "cpu")
 ##################################################
 
 ##### args
 model_type = 'mlp'
-# model_type = 'time-hetnet'
+model_type = 'time-hetnet'
 # model_type = 'hetnet'
+
 loss_method = 'euclidean'
 loss_method = 'mse'
-
-args_dims = "[64, 64, 64]"
 
 hidden_layer = 5
 cell = 256
@@ -82,7 +81,10 @@ batch_size = 500
 args_early_stopping = True
 args_epoch = 10000000
 args_lr = 0.001
-args_patience = 10
+
+# be careful to control args_patience, it can be stucked in a local minimum point.
+args_patience = 1000
+
 args_factor = 0.1
 
 train_size = 0.7
@@ -132,11 +134,14 @@ validation_list = user_list[0:1]
 test_list       = user_list[0:1]
 ##################################################
 
+args = argument_parser()
+
 def write_configruation(conf_file):
     #--------Write Configration--------
     import pandas as pd
     conf_df = pd.DataFrame({'device':[device],
                             'model_type':[model_type],
+                            'args_dims':[ast.literal_eval(args.dims)],
                             'loss_method':[loss_method],
                             'batch_size':[batch_size],
                             'hidden_layer':[hidden_layer],
@@ -180,8 +185,8 @@ if model_type == 'mlp':
     train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
     validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
 else:
-    training_data           = SegmentDataset(model_type, data_dir, train_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q)
-    validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q)
+    training_data           = SegmentDataset(model_type, data_dir, train_list, device, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
+    validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
     train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
     validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
 
@@ -199,7 +204,6 @@ if is_train == True:
         model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, loss_fn=loss_method, label_attribute=label_attribute, cell=cell, hidden_layer=hidden_layer)
 
     elif model_type == 'hetnet':
-        args = argument_parser()
         model = HetNet(dims = ast.literal_eval(args.dims),
                        output_shape=[y_timestep, label_attribute],
                        acti ='relu',
@@ -208,7 +212,6 @@ if is_train == True:
                        share_qs = False)
         print("Using Hetnet")
     elif model_type == 'time-hetnet':
-        args = argument_parser()
         model = TimeHetNet(dims_inf = ast.literal_eval(args.dims),
                            dims_pred = ast.literal_eval(args.dims_pred),
                            activation="relu",
@@ -249,12 +252,13 @@ if is_train == True:
         model.train()
         loss_train = 0.0
         for train_idx, train_data in enumerate(train_dataloader, 0):
+            if epoch > 2:
+                print(epoch)
             task_X, task_y = train_data
             optimizer.zero_grad()
             output = model(task_X)
             loss = criterion(task_y, output)
             loss_train += loss.item()
-
             loss.backward()
             optimizer.step()
 

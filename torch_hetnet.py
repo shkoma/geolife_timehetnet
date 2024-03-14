@@ -20,7 +20,7 @@ def getSequential(dims=[32, 32, 1], name=None, activation=None, begin = True, mi
     
     for idx, n in enumerate(dims):
         if final and idx == (len(dims) - 1):
-            final_list.append(My_Linear(in_features=dims[idx-1], out_features=out_features, name=f"{name} - {idx}"))
+            final_list.append(My_Linear(in_features=dims[idx-1], out_features=1, name=f"{name} - {idx}"))
         else:
             if begin and idx == 0:
                 # begin 의 input shape 변경이 필요할 듯
@@ -77,164 +77,132 @@ class HetNet(nn.Module):
         self.drop_layer2 = nn.Dropout(drop2)
         self.drop_layer3 = nn.Dropout(drop2)
 
-    def sub_call2(self, inp, training=False):
-        print(f"sub_call2")
+    # input should be [samples X features] and [samples X labels]
+    # def forward(self, inp, multi_task=True, training=False):
+    def forward(self, inp):
         que_x, sup_x, sup_y = inp
-        print(f"que_x:{que_x.shape}, sup_x:{sup_x.shape}, sup_y:{sup_y.shape}")
 
-        # sup_y_shape     = torch._shape_as_tensor(sup_y)
-        # sup_y_shape_new = sup_y_shape[:-2].tolist() + [-1]
-        # sup_y           = torch.reshape(sup_y, sup_y_shape_new)
-        sup_y = torch.mean(sup_y, dim=-2)
-        print(f"sup_y:{sup_y.shape}")
+        sup_x = sup_x.view(sup_x.shape[0], sup_x.shape[1], -1)
+        # sup_x: (5, 10, 1440)
+        sup_y = sup_y.view(sup_y.shape[0], sup_y.shape[1], -1)
+        # sup_y: (5, 10, 12)
+        que_x = que_x.view(que_x.shape[0], que_x.shape[1], -1)
 
-        M = torch._shape_as_tensor(sup_x)[0] # Batch (user_id)
-        N = torch._shape_as_tensor(sup_x)[1] # Mini-Batch
-        T = torch._shape_as_tensor(sup_x)[2] # Time (row)
-        F = torch._shape_as_tensor(sup_x)[3] # Channels/Features (column)
-
+        # sup_x: (5, 10, 120, 12) -> (5, 10, 1440)
+        # sup_y: (5, 10, 6, 2) -> (5, 10, 12)
         ##### Inference Network #####
         ##### Vbar Network #####
         # Encode sup_x to FxK
-        vs_bar = torch.unsqueeze(sup_x, axis=-1) # Expand
-        vs_bar = self.dense_v(vs_bar)            # Fv
-        print(f"vs_bar:{vs_bar.shape}")
-        vs_bar = torch.mean(vs_bar, axis=1)      # mean(Fv)
-        vs_bar = self.dense_c(vs_bar)            # Gv(mean(Fv))
-        print('Encode sup_x to FxK - vs_bar.shape:', vs_bar.shape)
-        
-        if not self.base:
-            # Encode que_x to FxK
-            vq_bar = torch.unsqueeze(que_x, axis=-1)
-            vq_bar = self.dense_v(vq_bar)
-            vq_bar = torch.mean(vq_bar, axis=1)
-            vq_bar = self.dense_c(vq_bar)
-            print('Encode que_x to FxK - vq_bar.shape', vq_bar.shape)
-        
+        vs_bar = torch.unsqueeze(sup_x, axis=-1)  # Expand
+        # sup_x: (5, 10, 1440, 1)
+        vs_bar = self.dense_v(vs_bar)  # Fv
+        # sup_x: (5, 10, 1440, 32)
+        vs_bar = torch.mean(vs_bar, axis=1)  # mean(Fv)
+        # sup_x: (5, 1440, 32)
+        vs_bar = self.dense_c(vs_bar)  # Gv(mean(Fv))
+        # sup_x: (5, 1440, 32)
+
         # Encode sup_y to FxK
         cs_bar = torch.unsqueeze(sup_y, axis=-1)
-        cs_bar = self.dense_v(cs_bar)            # Fc 
-        cs_bar = torch.mean(cs_bar, axis=1)      # mean(Fc)
-        cs_bar = self.dense_c(cs_bar)            # Gc(mean(Fc))
-        print('Encode sup_y to FxK - cs_bar.shape:', cs_bar.shape)
-        
+        # cs_bar = (5, 10, 12, 1)
+        cs_bar = self.dense_v(cs_bar)  # Fc
+        # cs_bar = (5, 10, 12, 32)
+        cs_bar = torch.mean(cs_bar, axis=1)  # mean(Fc)
+        # cs_bar = (5, 12, 32)
+        cs_bar = self.dense_c(cs_bar)  # Gc(mean(Fc))
+        # cs_bar = (5, 12, 32)
+
         ##### U Network #####
         # Tile FxK to NxFxK or NxJxK respectively
-        vs_bar = torch.tile(torch.unsqueeze(vs_bar, axis=1), [1, N, 1, 1, 1])
-        cs_bar = torch.tile(torch.unsqueeze(cs_bar, axis=1), [1, N, 1, 1])
-        print('Tile FxK to NxFxK or NxJxK respectively - vs_bar.shape, cs_bar.shape')
-        print(vs_bar.shape, cs_bar.shape)
-        
-        # Concatenate tiled to NxFxK+1 or NxJxK+1 respectively
-        # [sup_x, vs_bar]
-        u_xs = torch.concat([torch.unsqueeze(sup_x, axis=-1), vs_bar], axis=-1)
-        # [sup_y, cs_bar]
-        u_ys = torch.concat([torch.unsqueeze(sup_y, axis=-1), cs_bar], axis=-1)
-        print('Concatenate tiled to NxFxK+1 or NxJxK+1 respectively - u_xs.shape, u_ys.shape')
-        print(u_xs.shape, u_ys.shape)
-        
-        # Embed latent
-        u_xs = self.dense_uf(u_xs)          # Fu([sup_x, vs_bar])
-        u_ys = self.dense_uf(u_ys)  # Fu([sup_y, cs_bar])
+        vs_bar = torch.tile(torch.unsqueeze(vs_bar, axis=1), [1, sup_x.shape[1], 1, 1])
+        # vs_bar = (5, 10, 1440, 32)
+        cs_bar = torch.tile(torch.unsqueeze(cs_bar, axis=1), [1, sup_y.shape[1], 1, 1])
+        # cs_bar = (5, 10, 12, 32)
 
-        u_xs = torch.transpose(u_xs, 3, 2).contiguous()
+        # Concatenate tiled to NxFxK+1 or NxJxK+1 respectively
+        u_xs = torch.concat([torch.unsqueeze(sup_x, axis=-1), vs_bar], axis=-1)
+        # u_xs = (5, 10, 1440, 33)
+        u_ys = torch.concat([torch.unsqueeze(sup_y, axis=-1), cs_bar], axis=-1)
+        # u_ys = (5, 10, 12, 33)
+
+        # Embed latent
+        u_xs = self.dense_uf(u_xs)  # Fu([sup_x, vs_bar])
+        # u_xs = (5, 10, 1440, 32)
+        u_ys = self.dense_uf(u_ys)  # Fu([sup_y, cs_bar])
+        # u_ys = (5, 10, 12, 32)
 
         # attribute mean
         u_xs = torch.mean(u_xs, axis=2)  # mean(Fu([sup_x, vs_bar]))
+        # u_xs = (5, 10, 32)
         u_ys = torch.mean(u_ys, axis=2)  # mean(Fu([sup_y, cs_bar]))
+        # u_ys = (5, 10, 32)
 
-        # # time mean
-        # u_xs = torch.mean(u_xs, axis=2)  # mean(Fu([sup_x, vs_bar]))
-        # u_ys = torch.mean(u_ys, axis=2)  # mean(Fu([sup_y, cs_bar]))
-
-        print('Embed latent - u_xs.shape, u_ys.shape')
-        print(u_xs.shape, u_ys.shape)
-
-        u_s  = u_xs + u_ys                  # mean(Fu([sup_x, vs_bar])) + mean(Fu([sup_y, cs_bar]))
-        u_s  = self.dense_ug(u_s)           # Gu(mean(Fu([sup_x, vs_bar])) + mean(Fu([sup_y, cs_bar])))
-        print('u_s.shape:', u_s.shape)
+        # Embed latent
+        u_s = u_xs + u_ys  # mean(Fu([sup_x, vs_bar])) + mean(Fu([sup_y, cs_bar]))
+        # u_s = (5, 10, 32)
+        u_s = self.dense_ug(u_s)  # Gu(mean(Fu([sup_x, vs_bar])) + mean(Fu([sup_y, cs_bar])))
+        # u_s = (5, 10, 32)
 
         ##### Support network #####
         # Tile u features from NxK to NxFxK / NxJxK
-        u_s  = torch.unsqueeze(u_s, axis=2)
-        # u_s  = torch.unsqueeze(u_s, axis=2)
-        print('after unsqueeze, u_s.shape:', u_s.shape)
-        u_xs = torch.tile(u_s, [1, 1, torch._shape_as_tensor(sup_x)[2], 1, 1])
-        u_ys = torch.tile(u_s, [1, 1, torch._shape_as_tensor(sup_y)[2], 1])
-        print('# Tile u features from NxK to NxFxK / NxJxK')
-        print("u_xs.shape, u_ys.shape:", u_xs.shape, u_ys.shape)
+        u_s = torch.unsqueeze(u_s, axis=2)
+        # u_s = (5, 10, 1, 32)
+        u_xs = torch.tile(u_s, [1, 1, sup_x.shape[-1], 1])
+        # u_xs = (5, 10, 1440, 32)
+        u_ys = torch.tile(u_s, [1, 1, sup_y.shape[-1], 1])
+        # u_ys = (5, 10, 12, 32)
 
         # Concatenate with original and embed to NxFxK
-        # [sup_x, u_xs]
         in_xs = torch.concat([torch.unsqueeze(sup_x, axis=-1), u_xs], axis=-1)
-        # [sup_y, u_ys]
+        # in_xs = (5, 10, 1440, 33)
         in_ys = torch.concat([torch.unsqueeze(sup_y, axis=-1), u_ys], axis=-1)
-        in_xs = self.dense_fv(in_xs)          # Fv([sup_x, u_xs])
-        in_ys = self.dense_fv(in_ys)          # Fc([sup_y, u_ys])
+        # in_ys = (5, 10, 12, 33)
+        in_xs = self.dense_fv(in_xs)  # Fv([sup_x, u_xs])
+        # in_xs = (5, 10, 1440, 32)
+        in_ys = self.dense_fv(in_ys)  # Fc([sup_y, u_ys])
+        # in_ys = (5, 10, 12, 32)
 
         # Aggregate and embed to FxK / JxK
-        in_xs = torch.mean(in_xs, axis=1)     # mean(Fv([sup_x, u_xs]))
-        in_ys = torch.mean(in_ys, axis=1)     # mean(Fc([sup_y, u_ys]))
-        in_xs = self.dense_gv(in_xs)          # in_xs = Gv(mean(Fc([sup_y, u_ys])))
-        in_ys = self.dense_gv(in_ys)          # in_ys = Gv(mean(Fc([sup_y, u_ys])))
+        in_xs = torch.mean(in_xs, axis=1)  #
+        # in_xs = (5, 1440, 32)
+        in_ys = torch.mean(in_ys, axis=1)  # mean(Fc([sup_y, u_ys]))
+        # in_ys = (5, 12, 32)
+        in_xs = self.dense_gv(in_xs)  # in_xs = Gv(mean(Fc([sup_y, u_ys])))
+        # in_xs = (5, 1440, 32)
+        in_ys = self.dense_gv(in_ys)  # in_ys = Gv(mean(Fc([sup_y, u_ys])))
+        # in_ys = (5, 12, 32)
 
         # Dropout
         in_xs = self.drop_layer1(in_xs)
         in_ys = self.drop_layer3(in_ys)
 
-        print('in_xs.shape:', in_xs.shape)
-        print('in_ys.shape:', in_ys.shape)
-
-        ##### Prediction net ##### 
+        ##### Prediction net #####
         # Tile support_net outputs to NxFxK / NxJxK
-        #if True:
-        p_xs = torch.tile(torch.unsqueeze(in_xs, axis=1), [1, torch._shape_as_tensor(que_x)[1], 1, 1, 1])
-        p_ys = torch.tile(torch.unsqueeze(in_ys, axis=1), [1, torch._shape_as_tensor(que_x)[1], 1, 1])
-
-        print('p_xs.shape:', p_xs.shape)
-        print('p_ys.shape:', p_ys.shape)
+        p_xs = torch.tile(torch.unsqueeze(in_xs, axis=1), [1, que_x.shape[1], 1, 1])
+        # p_xs = (5, 10, 1440, 32)
+        p_ys = torch.tile(torch.unsqueeze(in_ys, axis=1), [1, que_x.shape[1], 1, 1])
+        # p_ys = (5, 10, 12, 32)
 
         # [que_x, p_xs]
         z = torch.concat([torch.unsqueeze(que_x, axis=-1), p_xs], axis=-1)
-        print('z.shape:', z.shape)
+        # z = (5, 10, 1440, 33)
 
-        z = self.dense_fz(z)                # Fz([que_x, p_xs])
-        z = torch.mean(z, axis=2) # Nq x K  # mean(Fz([que_x, p_xs]))
-        z = self.dense_gz(z)                # Gz(mean(Fz([que_x, p_xs])))
+        z = self.dense_fz(z)  # Fz([que_x, p_xs])
+        # z = (5, 10, 1440, 32)
+        z = torch.mean(z, axis=2)  # Nq x K  # mean(Fz([que_x, p_xs]))
+        # z = (5, 10, 32)
+        z = self.dense_gz(z)  # Gz(mean(Fz([que_x, p_xs])))
+        # z = (5, 10, 32)
 
         z = torch.unsqueeze(z, axis=2)
-        print('z.shape2:', z.shape)
+        # z = (5, 10, 1, 32)
 
-        z = torch.tile(z,[1, 1, torch._shape_as_tensor(sup_y)[2], 1])
-        print('z.shape3:', z.shape)
-        print('p_ys:', p_ys.shape)
+        z = torch.tile(z, [1, 1, sup_y.shape[-1], 1])
+        # z = (5, 10, 12, 32)
         y = torch.concat([z, p_ys], axis=-1)
+        # y = (5, 10, 12, 64)
         y = self.dense_fy(y)
-        # return y (que_y)
+        # y = (5, 10, 12)
+        y = y.view(sup_y.shape[0], sup_y.shape[1], -1, 2)
 
-        print('y:', y.shape)
-        out_shape = torch._shape_as_tensor(y)
-        out_shape_new = out_shape[:-1].tolist() + [-1] + [self.output_shape[1]]  # 2: location, -1: time-step(y_timestep)
-        print(f'out_shape: {out_shape_new}')
-        out = torch.reshape(y, out_shape_new)
-        return out
-        
-    # input should be [samples X features] and [samples X labels]
-    # def forward(self, inp, multi_task=True, training=False):
-    def forward(self, inp):
-        # que_x, sup_x, sup_y = inp
-        # print(f"torch_hetnet forward")
-        # print(f"que_x:{que_x.shape}, sup_x:{sup_x.shape}, sup_y:{sup_y.shape}")
-        
-        # que_x = self.enc(que_x)
-        # sup_x = self.enc(sup_x)
-        # sup_y = torch.from_numpy(sup_y).float()
-        
-        # print(f"after encode")
-        # print(f"que_x:{que_x.shape}, sup_x:{sup_x.shape}, sup_y:{sup_y.shape}")
-        
-        # inp = (que_x, sup_x, sup_y)
-        
-        # if multi_task:
-        return self.sub_call2(inp)
-        # return None
+        return y
