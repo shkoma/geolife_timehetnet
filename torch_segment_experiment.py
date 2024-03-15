@@ -42,12 +42,12 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:2" if use_cuda else "cpu")
+device = torch.device("cuda:0" if use_cuda else "cpu")
 ##################################################
 
 ##### args
 model_type = 'mlp'
-model_type = 'time-hetnet'
+# model_type = 'time-hetnet'
 # model_type = 'hetnet'
 
 loss_method = 'euclidean'
@@ -57,8 +57,8 @@ hidden_layer = 5
 cell = 256
 
 # min
-round_min = 10
-day = 144 # 6*24
+round_min = 60
+day = 12 # 6*24
 
 # sec
 round_sec = 10 # (seconds) per 10s
@@ -67,10 +67,10 @@ time_delta = 20 # (minutes) 1 segment length
 
 file_mode = 'min'
 # length = min_length * time_delta
-length = day * 8 # 8 days
-y_timestep = day # 1 day (24 hours)
+length = day * 28    # 8 days
+y_timestep = day * 7 # 1 day (24 hours)
 
-x_attribute = 8
+x_attribute = 9
 label_attribute = 2
 
 sample_s = 10
@@ -83,7 +83,7 @@ args_epoch = 10000000
 args_lr = 0.001
 
 # be careful to control args_patience, it can be stucked in a local minimum point.
-args_patience = 1000
+args_patience = 100
 
 args_factor = 0.1
 
@@ -252,12 +252,13 @@ if is_train == True:
         model.train()
         loss_train = 0.0
         for train_idx, train_data in enumerate(train_dataloader, 0):
-            if epoch > 2:
-                print(epoch)
             task_X, task_y = train_data
             optimizer.zero_grad()
             output = model(task_X)
-            loss = criterion(task_y, output)
+
+            output = torch.concat([torch.unsqueeze(task_y[:,:,0], -1), output], axis=-1)
+
+            loss = criterion(task_y[task_y[:, :, 0] == 1], output[output[:, :, 0] == 1])
             loss_train += loss.item()
             loss.backward()
             optimizer.step()
@@ -273,8 +274,11 @@ if is_train == True:
         with torch.no_grad():
             for val_idx, val_data in enumerate(validation_dataloader, 0):
                 X_val, y_val = val_data
-                val_outputs = model(X_val)     
-                val_loss = criterion(y_val, val_outputs)
+                val_outputs = model(X_val)
+        
+                val_outputs = torch.concat([torch.unsqueeze(y_val[:, :, 0], -1), val_outputs], axis=-1)
+
+                val_loss = criterion(y_val[y_val[:, :, 0] == 1], val_outputs[val_outputs[:, :, 0] == 1])
                 loss_val += val_loss.item()
 
             if epoch % 100 == 1:

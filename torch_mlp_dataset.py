@@ -1,3 +1,4 @@
+import random
 import pandas as pd
 import numpy as np
 import torch
@@ -46,8 +47,8 @@ class MlpDataset(Dataset):
                 self.user_list[0]) + self.min_csv
             self.df = pd.read_csv(self.min_file)
 
-            self.df_1 = self.df[self.df.columns[3:-2].to_list()].copy()
-            self.df_1 = pd.concat([self.df_1, self.df.iloc[:, 1:3]], axis=1)  # x, y
+            self.df_1 = self.df[self.df.columns[2:].to_list()].copy()
+            self.df_1 = pd.concat([self.df_1, self.df.iloc[:, 0:2]], axis=1)  # x, y
             self.columns = self.df_1.columns.to_list()
 
             self.samples = self.sampleMinSet(self.df_1)
@@ -59,8 +60,13 @@ class MlpDataset(Dataset):
         user_df = dataset.copy()
         mini_batch = []
 
-        for idx in range(0, int(user_df.shape[0] / self.length)):
-            cur_sample = user_df.iloc[idx*self.length:(idx+1)*self.length, :]
+        day = 12
+        days = np.arange(int(user_df.shape[0] / day) - int(self.length/day))
+        random.shuffle(days)
+
+        for idx in days:
+            index = idx*day
+            cur_sample = user_df.iloc[index:(index + self.length), :]
             mini_batch.append(cur_sample)
 
         return np.array(mini_batch)
@@ -89,10 +95,10 @@ class MlpDataset(Dataset):
 
     def __getitem__(self, idx):
         task_X = self.samples[idx, :, :].copy()
-        task_y = task_X[-self.y_timestep:, -self.label_attribute:].copy()
+        task_y = task_X[-self.y_timestep:, -(self.label_attribute + 1):].copy()
 
         if self.y_timestep > 0:
-            task_X[-self.y_timestep:, -self.label_attribute:] = 0
+            task_X[-self.y_timestep:, -(self.label_attribute + 1):] = 0
 
         task_X = torch.tensor(task_X, dtype=torch.double).to(self.device)
         task_y = torch.tensor(task_y, dtype=torch.double).to(self.device)
