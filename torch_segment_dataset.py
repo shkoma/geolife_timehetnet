@@ -61,31 +61,37 @@ class SegmentDataset(Dataset):
                     self.user_data_list.append(self.sampleSet(df_1, user_id))
             else:
                 # min
-                df = pd.read_csv(self.min_file)
+                min_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.min_csv
+                df = pd.read_csv(min_file)
 
-                df_1 = df[df.columns[3:-2].to_list()].copy()
+                df_1 = df[df.columns[3:].to_list()].copy()
                 df_1 = pd.concat([df_1, df.iloc[:, 1:3]], axis=1)  # x, y
                 self.columns = df_1.columns.to_list()
                 self.sampleMinSet(df_1)
-
         return
+
     def sampleMinSet(self, dataset):
         user_df = dataset.copy()
         total_samps = self.sample_s + self.sample_q
 
         mini_batch = []
+
+        day = 144 * 3
+        grid_days = np.arange(int(user_df.shape[0] / day) - int(self.length / day))
+        random.shuffle(grid_days)
+
         count = 0
-        user_length = int(user_df.shape[0] / self.length)
-        print(f"user_lenth: {user_length}")
-        for idx in range(0, user_length):
-            if count != 0 and count % total_samps == 0:
+        for idx in grid_days:
+            count += 1
+            index = idx * day
+            cur_sample = user_df.iloc[index:index + self.length, :]
+            mini_batch.append(cur_sample)
+
+            if count % total_samps == 0:
                 self.full_user_data_list.append(np.array(mini_batch))
                 mini_batch = []
-                if user_length - count < total_samps:
+                if len(grid_days) - count < total_samps:
                     return
-            count += 1
-            cur_sample = user_df.iloc[idx * self.length:(idx + 1) * self.length, :]
-            mini_batch.append(cur_sample)
         return
 
     def sampleSet(self, dataset, user_id):
@@ -172,10 +178,10 @@ class SegmentDataset(Dataset):
             # min
             task_X = self.full_user_data_list[index].copy()
 
-        task_y = task_X[:, -self.y_timestep:, -self.label_attribute:].copy()
+        task_y = task_X[:, -self.y_timestep:, -(self.label_attribute+1):].copy()
 
         if self.y_timestep > 0:
-            task_X[:, -self.y_timestep:, -self.label_attribute:] = 0
+            task_X[:, -self.y_timestep:, -(self.label_attribute+1):] = 0
 
         sup_x = np.array(task_X[:self.sample_s, :, :])
         sup_y = np.array(task_y[:self.sample_s, :, :])

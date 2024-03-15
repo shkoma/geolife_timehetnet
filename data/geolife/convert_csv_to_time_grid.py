@@ -27,7 +27,7 @@ gap = 10
 round_min = str(gap) + 'min'
 round_sec = str(gap) + 's'
 
-time_delta = 10
+time_delta = 20
 segment_delta = str(time_delta) + 'min'
 
 lat1, lon1 = 39.975300, 116.452488  # Lower-left corner
@@ -36,20 +36,28 @@ lat2, lon2 = 41.367085, 122.651456  # Upper-right corner
 # origin_grid_10min = just add grid in original csv file
 # grid_10min        = from begin to end full data with fillna(ffill)
 
-grid_csv = '_origin_grid_' + round_sec + '.csv'
+grid_csv = '_origin_grid_' + round_min + '.csv'
 segment_csv = '_segment_list_' + segment_delta + '.csv'
-grid_list = [50, 100, 500, 1000, 1500, 2000, 3000]
+grid_list = [1000]  # [50, 100, 500, 1000, 1500, 2000, 3000]
+
+user_id_list = []
+df_len_list = []
+seg_list = []
 
 for id in valid_user_list['valid_user_list']:
+    # id = 68
     print(f"user_id: {id}")
     user_id = locationPreprocessor.getUserId(id)
+    user_id_list += [user_id]
     csv_file = './Data/' + user_id + '/csv/' + user_id + '.csv'
     segment_file = './Data/' + user_id + '/csv/' + user_id + segment_csv
     grid_file = './Data/' + user_id + '/csv/' + user_id + grid_csv
 
     df = pd.read_csv(csv_file)
+    df_len_list += [df.shape[0]]
+
     df['datetime'] = pd.to_datetime(df['date'] + " " + df['time'])
-    df['datetime'] = df['datetime'].dt.round(round_sec)
+    df['datetime'] = df['datetime'].dt.round(round_min)
 
     df = df.set_index('datetime').reset_index()
     user_df = df.groupby('datetime')[df.columns[1:].to_list()].mean().reset_index()
@@ -57,34 +65,27 @@ for id in valid_user_list['valid_user_list']:
 
     user_df['datetime'] = pd.to_datetime(user_df['datetime'])
 
+    ## make data fully
+    begin = user_df['datetime'][0]
+    end = user_df['datetime'][user_df.shape[0] - 1]
+
+    print(f'begin: {begin}')
+    print(f'end: {end}')
+
     user_df['year'] = user_df['datetime'].dt.year
     user_df['month'] = user_df['datetime'].dt.month
-    user_df['week'] = user_df['datetime'].dt.weekday
-    user_df['weekend'] = np.where(user_df['week'] < 5, 0, 1)
-    user_df['hour'] = user_df['datetime'].dt.hour
+    user_df['week'] = user_df['datetime'].dt.weekday + 1
+    # user_df['weekend'] = np.where(user_df['week'] < 5, 0, 1)
+    user_df['hour'] = user_df['datetime'].dt.hour + 1
     user_df['day'] = user_df['datetime'].dt.day
 
-    # 시간 간격 계산
-    user_df['time_diff'] = user_df['datetime'].diff()
+    date_df = pd.DataFrame({'datetime': pd.date_range(begin, end, freq=round_min)})
+    user_df = pd.merge(date_df, user_df, how='outer', on='datetime')
+    user_df['time_grid'] = np.arange(1, user_df.shape[0] + 1)
+    user_df = user_df.fillna(0)
+    user_df = user_df.drop(columns=['altitude', 'what', 'days'])
+    user_df = user_df.set_index('datetime')
 
-    # 1분 이상인 경우 세그먼트로 분류
-    threshold = pd.Timedelta(minutes=1)
-    user_df['segment'] = (user_df['time_diff'] > threshold).cumsum()
-
-    # save segment_list
-    # 세그먼트별 시작 시간과 끝 시간 추출 그리고, 시간 간격별 segment list 추출
-    segment_info = user_df.groupby('segment')['datetime'].agg(['min', 'max'])
-    segment_info = segment_info.reset_index()
-    segment_info['time_gap'] = segment_info['max'] - segment_info['min']
-    segment_info['over_time_delta'] = segment_info['time_gap'] >= pd.Timedelta(minutes=time_delta)
-    segment_info = segment_info.loc[segment_info['over_time_delta'] == True, :]
-    segment_list = segment_info['segment'].to_list()
-
-    segment_df = pd.DataFrame({'segment_list': segment_list})
-    segment_df.to_csv(segment_file, index=False)
-
-    # grid process
-    user_df = user_df.drop(columns=['altitude', 'what'])
     for grid_len in grid_list:
         mapCreator = GPSGridMapCreator(grid_len)
         mapCreator.create_grid_map(lat1, lon1, lat2, lon2)
@@ -96,6 +97,26 @@ for id in valid_user_list['valid_user_list']:
         user_df[grid_row], user_df[grid_col], _, _, _ = mapCreator.find_grid_number(user_df['latitude'],
                                                                                     user_df['longitude'])
 
+    user_df = user_df.drop(columns=['latitude', 'longitude'])
+
+    ## remove 0 day
+    df = user_df.copy()
+    df_1 = df.head(1)
+    day = 144  # 10min * 6 * 24
+    full_day = int(df.shape[0] / day)
+    # remove empty days
+    for idx in range(0, full_day):
+        x = df.iloc[day * idx:day * (idx + 1), 1:2].sum()[0]
+        if x != 0.0:
+            df_1 = pd.concat([df_1, df.iloc[day * idx:day * (idx + 1), :]], axis=0)
+
+    df_1 = df_1.drop_duplicates().reset_index(drop=True)
+
+    # check whether the user has any empty day
+    full_day = int(df_1.shape[0] / day)
+    for idx in range(0, full_day):
+        x = df_1.iloc[day * idx:day * (idx + 1), 1:2].sum()[0]
+        if x == 0.0:
+            print(x)
     # save grid file
-    user_df = user_df.drop(columns=['datetime', 'latitude', 'longitude'])
-    user_df.to_csv(grid_file, index=False)
+    df_1.to_csv(grid_file)

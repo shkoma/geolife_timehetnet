@@ -42,7 +42,7 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
+device = torch.device("cuda:2" if use_cuda else "cpu")
 ##################################################
 
 ##### args
@@ -67,8 +67,10 @@ time_delta = 20 # (minutes) 1 segment length
 
 file_mode = 'min'
 # length = min_length * time_delta
-length = day * 28    # 8 days
-y_timestep = day * 7 # 1 day (24 hours)
+
+how_many = 28
+length = day * how_many
+y_timestep = day * 7
 
 x_attribute = 9
 label_attribute = 2
@@ -83,7 +85,7 @@ args_epoch = 10000000
 args_lr = 0.001
 
 # be careful to control args_patience, it can be stucked in a local minimum point.
-args_patience = 100
+args_patience = 1000
 
 args_factor = 0.1
 
@@ -110,15 +112,24 @@ best_train_model = 'best_train_model.pth'
 ##################################################
 
 ##### User List
-user_list_file = 'user_data_volumn.csv'#'grid_user_list.csv'
-segment_col = 'segment_list_' + str(time_delta) + 'min'
-user_df = pd.read_csv('data/geolife/' + user_list_file)
-user_df = user_df.loc[user_df[segment_col] >= (sample_s + sample_q), :]
+# user_list_file = 'user_data_volumn.csv'#'grid_user_list.csv'
+# segment_col = 'segment_list_' + str(time_delta) + 'min'
+# user_df = pd.read_csv('data/geolife/' + user_list_file)
+# user_df = user_df.loc[user_df[segment_col] >= (sample_s + sample_q), :]
+# locationPreprocessor = LocationPreprocessor('data/geolife/')
+# user_list = []
+# for user in user_df['user_id'].to_list():
+#     user_list += [locationPreprocessor.getUserId(user)]
+# # user_list = ["068"]#, "003", "004"]
+
+##### Time grid User list
+time_grid_csv = 'data/geolife/time_grid_sample.csv'
+user_df = pd.read_csv(time_grid_csv)
+user_df = user_df.loc[user_df['time_sample'] > ((sample_s + sample_q) * how_many), :]
 locationPreprocessor = LocationPreprocessor('data/geolife/')
 user_list = []
 for user in user_df['user_id'].to_list():
     user_list += [locationPreprocessor.getUserId(user)]
-# user_list = ["068"]#, "003", "004"]
 ##################################################
 
 ##### Train - Validation user list
@@ -131,7 +142,7 @@ test_list       = user_list[(train_len + validation_len):]
 
 train_list = user_list[0:1]
 validation_list = user_list[0:1]
-test_list       = user_list[0:1]
+# test_list       = user_list[0:1]
 ##################################################
 
 args = argument_parser()
@@ -146,7 +157,6 @@ def write_configruation(conf_file):
                             'batch_size':[batch_size],
                             'hidden_layer':[hidden_layer],
                             'label_attribute':[label_attribute],
-                            'user_list_file':[user_list_file],
                             'sample_s':[sample_s],
                             'sample_q':[sample_q],
                             'epoch':[args_epoch],
@@ -220,7 +230,7 @@ if is_train == True:
                            block = args.block.split(","),
                            output_shape=[y_timestep, label_attribute],
                            length = length)
-        
+
     else:
         model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, loss_fn=loss_method, label_attribute=label_attribute, cell=cell, hidden_layer=hidden_layer)
 
@@ -242,7 +252,7 @@ if is_train == True:
     best_val_loss = float("inf")
     best_train_loss = float("inf")
     no_improvement = 0
-    
+
     model = model.to(torch.double)
     model = model.to(device)
 
@@ -253,12 +263,17 @@ if is_train == True:
         loss_train = 0.0
         for train_idx, train_data in enumerate(train_dataloader, 0):
             task_X, task_y = train_data
+
             optimizer.zero_grad()
             output = model(task_X)
 
-            output = torch.concat([torch.unsqueeze(task_y[:,:,0], -1), output], axis=-1)
+            if model_type == 'mlp':
+                output = torch.concat([torch.unsqueeze(task_y[:,:,0], -1), output], axis=-1)
+                loss = criterion(task_y[task_y[:, :, 0] == 1], output[output[:, :, 0] == 1])
+            else:
+                output = torch.cat((task_y[:, :, :, 0].unsqueeze(-1), output), dim=-1)
+                loss = criterion(task_y[task_y[:, :, :, 0] == 1], output[output[:, :, :, 0] == 1])
 
-            loss = criterion(task_y[task_y[:, :, 0] == 1], output[output[:, :, 0] == 1])
             loss_train += loss.item()
             loss.backward()
             optimizer.step()
@@ -269,16 +284,20 @@ if is_train == True:
         model.eval()
         if epoch == 0:
             write_configruation(writer_dir + "/" + configuration_file)
-        
+
         loss_val = 0.0
         with torch.no_grad():
             for val_idx, val_data in enumerate(validation_dataloader, 0):
                 X_val, y_val = val_data
                 val_outputs = model(X_val)
-        
-                val_outputs = torch.concat([torch.unsqueeze(y_val[:, :, 0], -1), val_outputs], axis=-1)
 
-                val_loss = criterion(y_val[y_val[:, :, 0] == 1], val_outputs[val_outputs[:, :, 0] == 1])
+                if model_type == 'mlp':
+                    val_outputs = torch.concat([torch.unsqueeze(y_val[:, :, 0], -1), val_outputs], axis=-1)
+                    val_loss = criterion(y_val[y_val[:, :, 0] == 1], val_outputs[val_outputs[:, :, 0] == 1])
+                else:
+                    val_outputs = torch.cat((y_val[:, :, :, 0].unsqueeze(-1), val_outputs), dim=-1)
+                    val_loss = criterion(y_val[y_val[:, :, :, 0] == 1], val_outputs[val_outputs[:, :, :, 0] == 1])
+
                 loss_val += val_loss.item()
 
             if epoch % 100 == 1:
@@ -293,7 +312,7 @@ if is_train == True:
             torch.save(model.state_dict(), best_model_path)
         else:
             no_improvement += 1
-        
+
         if loss_train < best_train_loss:
             best_train_loss = loss_train
             print('save best train model')

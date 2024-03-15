@@ -95,10 +95,10 @@ class MlpDataset(Dataset):
 
     def __getitem__(self, idx):
         task_X = self.samples[idx, :, :].copy()
-        task_y = task_X[-self.y_timestep:, -(self.label_attribute + 1):].copy()
+        task_y = task_X[-self.y_timestep:, -(self.label_attribute+1):].copy()
 
         if self.y_timestep > 0:
-            task_X[-self.y_timestep:, -(self.label_attribute + 1):] = 0
+            task_X[-self.y_timestep:, -(self.label_attribute+1):] = 0
 
         task_X = torch.tensor(task_X, dtype=torch.double).to(self.device)
         task_y = torch.tensor(task_y, dtype=torch.double).to(self.device)
