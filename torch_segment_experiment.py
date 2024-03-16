@@ -42,12 +42,12 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:2" if use_cuda else "cpu")
+device = torch.device("cuda:3" if use_cuda else "cpu")
 ##################################################
 
 ##### args
 model_type = 'mlp'
-# model_type = 'time-hetnet'
+model_type = 'time-hetnet'
 # model_type = 'hetnet'
 
 loss_method = 'euclidean'
@@ -78,14 +78,14 @@ label_attribute = 2
 sample_s = 10
 sample_q = 10
 
-batch_size = 500
+batch_size = 10
 
 args_early_stopping = True
 args_epoch = 10000000
 args_lr = 0.001
 
 # be careful to control args_patience, it can be stucked in a local minimum point.
-args_patience = 1000
+args_patience = 50
 
 args_factor = 0.1
 
@@ -125,7 +125,7 @@ best_train_model = 'best_train_model.pth'
 ##### Time grid User list
 time_grid_csv = 'data/geolife/time_grid_sample.csv'
 user_df = pd.read_csv(time_grid_csv)
-user_df = user_df.loc[user_df['time_sample'] > ((sample_s + sample_q) * how_many), :]
+user_df = user_df.loc[user_df['time_grid'] > ((sample_s + sample_q) * how_many), :]
 locationPreprocessor = LocationPreprocessor('data/geolife/')
 user_list = []
 for user in user_df['user_id'].to_list():
@@ -140,8 +140,8 @@ train_list      = user_list[0:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):]
 
-train_list = user_list[0:1]
-validation_list = user_list[0:1]
+train_list = ['068'] #user_list[0:1]
+validation_list = ['068'] #user_list[0:1]
 # test_list       = user_list[0:1]
 ##################################################
 
@@ -163,6 +163,7 @@ def write_configruation(conf_file):
                             'patience':[args_patience],
                             'x_attribute':[x_attribute],
                             'file_mode':[file_mode],
+                            'day':[day],
                             'round_min':[round_min],
                             'round_sec':[round_sec],
                             'time_delta':[time_delta],
@@ -190,13 +191,13 @@ print("Building Network ...")
 
 # Dataset
 if model_type == 'mlp':
-    training_data           = MlpDataset(data_dir, train_list, y_timestep, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
-    validation_data         = MlpDataset(data_dir, validation_list, y_timestep, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
+    training_data           = MlpDataset(data_dir, train_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
+    validation_data         = MlpDataset(data_dir, validation_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
     train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
     validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
 else:
-    training_data           = SegmentDataset(model_type, data_dir, train_list, device, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
-    validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
+    training_data           = SegmentDataset(model_type, data_dir, train_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
+    validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
     train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
     validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
 

@@ -6,11 +6,12 @@ import torch
 from torch.utils.data import Dataset
 
 class SegmentDataset(Dataset):
-    def __init__(self, model_type, data_dir, user_list, device, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode='min'):
+    def __init__(self, model_type, data_dir, user_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode='min'):
         self.model_type = model_type
         self.data_dir = data_dir
         self.user_list = user_list
         self.device = device
+        self.day = day
         self.round_min = round_min
         self.round_sec = round_sec
         self.time_delta = time_delta
@@ -76,14 +77,13 @@ class SegmentDataset(Dataset):
 
         mini_batch = []
 
-        day = 144 * 3
-        grid_days = np.arange(int(user_df.shape[0] / day) - int(self.length / day))
+        grid_days = np.arange(int(user_df.shape[0] / self.day) - int(self.length / self.day))
         random.shuffle(grid_days)
 
         count = 0
         for idx in grid_days:
             count += 1
-            index = idx * day
+            index = idx * self.day
             cur_sample = user_df.iloc[index:index + self.length, :]
             mini_batch.append(cur_sample)
 

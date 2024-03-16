@@ -6,11 +6,12 @@ from torch.utils.data import Dataset
 
 
 class MlpDataset(Dataset):
-    def __init__(self, data_dir, user_list, y_timestep, round_min, round_sec, time_delta, label_attribute, length, device, file_mode = 'min'):
+    def __init__(self, data_dir, user_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode = 'min'):
         self.data_dir = data_dir
         self.user_list = user_list
         self.y_timestep = y_timestep
         self.label_attribute = label_attribute
+        self.day = day
         self.round_min = round_min
         self.round_sec = round_sec
         self.time_delta = time_delta
@@ -60,12 +61,11 @@ class MlpDataset(Dataset):
         user_df = dataset.copy()
         mini_batch = []
 
-        day = 12
-        days = np.arange(int(user_df.shape[0] / day) - int(self.length/day))
+        days = np.arange(int(user_df.shape[0] / self.day) - int(self.length/self.day))
         random.shuffle(days)
 
         for idx in days:
-            index = idx*day
+            index = idx * self.day
             cur_sample = user_df.iloc[index:(index + self.length), :]
             mini_batch.append(cur_sample)
 
