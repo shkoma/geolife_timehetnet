@@ -56,6 +56,8 @@ loss_method = 'mse'
 hidden_layer = 5
 cell = 256
 
+file_mode = 'min'
+
 # min
 round_min = 60
 day = 12 # 6*24
@@ -64,19 +66,17 @@ day = 12 # 6*24
 round_sec = 10 # (seconds) per 10s
 min_length = 6
 time_delta = 20 # (minutes) 1 segment length
-
-file_mode = 'min'
 # length = min_length * time_delta
 
-how_many = 28
+how_many = 14
 length = day * how_many
-y_timestep = day * 7
+y_timestep = day * 3
 
 x_attribute = 9
 label_attribute = 2
 
-sample_s = 10
-sample_q = 10
+sample_s = 5
+sample_q = 5
 
 batch_size = 10
 
@@ -125,11 +125,13 @@ best_train_model = 'best_train_model.pth'
 ##### Time grid User list
 time_grid_csv = 'data/geolife/time_grid_sample.csv'
 user_df = pd.read_csv(time_grid_csv)
-user_df = user_df.loc[user_df['time_grid'] > ((sample_s + sample_q) * how_many), :]
+# user_df = user_df.loc[user_df['time_grid'] > ((sample_s + sample_q) * how_many), :]
+user_df = user_df.loc[user_df['ratio'] > 10, :]
 locationPreprocessor = LocationPreprocessor('data/geolife/')
 user_list = []
 for user in user_df['user_id'].to_list():
     user_list += [locationPreprocessor.getUserId(user)]
+print(f"user_list: {user_list}")
 ##################################################
 
 ##### Train - Validation user list
@@ -140,8 +142,8 @@ train_list      = user_list[0:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):]
 
-train_list = ['068'] #user_list[0:1]
-validation_list = ['068'] #user_list[0:1]
+train_list = user_list[0:1]
+validation_list = user_list[0:1]
 # test_list       = user_list[0:1]
 ##################################################
 

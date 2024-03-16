@@ -78,7 +78,9 @@ class SegmentDataset(Dataset):
         mini_batch = []
 
         grid_days = np.arange(int(user_df.shape[0] / self.day) - int(self.length / self.day))
+        # grid_days = np.arange(int(user_df.shape[0] / self.length))
         random.shuffle(grid_days)
+        print(f"user_df: {user_df.shape[0]}, day: {self.day}, grid_day's len: {len(grid_days)}")
 
         count = 0
         for idx in grid_days:
@@ -91,6 +93,7 @@ class SegmentDataset(Dataset):
                 self.full_user_data_list.append(np.array(mini_batch))
                 mini_batch = []
                 if len(grid_days) - count < total_samps:
+                    print(f"full_user_data_list: {len(self.full_user_data_list)}")
                     return
         return
 
