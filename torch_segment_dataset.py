@@ -65,8 +65,8 @@ class SegmentDataset(Dataset):
                 min_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.min_csv
                 df = pd.read_csv(min_file)
 
-                df_1 = df[df.columns[3:].to_list()].copy()
-                df_1 = pd.concat([df_1, df.iloc[:, 1:3]], axis=1)  # x, y
+                df_1 = df[df.columns[2:].to_list()].copy()
+                df_1 = pd.concat([df_1, df.iloc[:, 0:2]], axis=1)  # x, y
                 self.columns = df_1.columns.to_list()
                 self.sampleMinSet(df_1)
         return
@@ -187,17 +187,19 @@ class SegmentDataset(Dataset):
             task_X[:, -self.y_timestep:, -(self.label_attribute+1):] = 0
 
         sup_x = np.array(task_X[:self.sample_s, :, :])
-        sup_y = np.array(task_y[:self.sample_s, :, :])
+        sup_y = np.array(task_y[:self.sample_s, :, 1:])
         que_x = np.array(task_X[self.sample_s:, :, :])
-        que_y = np.array(task_y[self.sample_s:, :, :])
+        que_y = np.array(task_y[self.sample_s:, :, 1:])
+        mask  = np.array(task_y[self.sample_s:, :, 0])
 
         sup_x = torch.from_numpy(sup_x).double().to(self.device)
         sup_y = torch.from_numpy(sup_y).double().to(self.device)
         que_x = torch.from_numpy(que_x).double().to(self.device)
         que_y = torch.from_numpy(que_y).double().to(self.device)
+        mask  = torch.from_numpy(mask).to(self.device)
 
         task_X = (que_x, sup_x, sup_y)
-        task_y = que_y
+        task_y = (mask, que_y)
 
         return task_X, task_y
     

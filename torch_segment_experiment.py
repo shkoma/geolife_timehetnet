@@ -60,7 +60,7 @@ file_mode = 'min'
 
 # min
 round_min = 60
-day = 12 # 6*24
+day = 24 # 6*24
 
 # sec
 round_sec = 10 # (seconds) per 10s
@@ -75,17 +75,17 @@ y_timestep = day * 3
 x_attribute = 9
 label_attribute = 2
 
-sample_s = 5
-sample_q = 5
+sample_s = 10
+sample_q = 10
 
-batch_size = 10
+batch_size = 500
 
 args_early_stopping = True
 args_epoch = 10000000
 args_lr = 0.001
 
 # be careful to control args_patience, it can be stucked in a local minimum point.
-args_patience = 50
+args_patience = 1000
 
 args_factor = 0.1
 
@@ -274,8 +274,10 @@ if is_train == True:
                 output = torch.concat([torch.unsqueeze(task_y[:,:,0], -1), output], axis=-1)
                 loss = criterion(task_y[task_y[:, :, 0] == 1], output[output[:, :, 0] == 1])
             else:
-                output = torch.cat((task_y[:, :, :, 0].unsqueeze(-1), output), dim=-1)
-                loss = criterion(task_y[task_y[:, :, :, 0] == 1], output[output[:, :, :, 0] == 1])
+                mask, y_true = task_y
+                output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
+                y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
+                loss = criterion(y_true[y_true[:, :, :, 0] == 1], output[output[:, :, :, 0] == 1])
 
             loss_train += loss.item()
             loss.backward()
@@ -292,14 +294,16 @@ if is_train == True:
         with torch.no_grad():
             for val_idx, val_data in enumerate(validation_dataloader, 0):
                 X_val, y_val = val_data
-                val_outputs = model(X_val)
+                output = model(X_val)
 
                 if model_type == 'mlp':
-                    val_outputs = torch.concat([torch.unsqueeze(y_val[:, :, 0], -1), val_outputs], axis=-1)
-                    val_loss = criterion(y_val[y_val[:, :, 0] == 1], val_outputs[val_outputs[:, :, 0] == 1])
+                    output = torch.concat([torch.unsqueeze(y_val[:, :, 0], -1), output], axis=-1)
+                    val_loss = criterion(y_val[y_val[:, :, 0] == 1], output[output[:, :, 0] == 1])
                 else:
-                    val_outputs = torch.cat((y_val[:, :, :, 0].unsqueeze(-1), val_outputs), dim=-1)
-                    val_loss = criterion(y_val[y_val[:, :, :, 0] == 1], val_outputs[val_outputs[:, :, :, 0] == 1])
+                    mask, y_true = y_val
+                    output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
+                    y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
+                    val_loss = criterion(y_true[y_true[:, :, :, 0] == 1], output[output[:, :, :, 0] == 1])
 
                 loss_val += val_loss.item()
 

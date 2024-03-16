@@ -326,7 +326,8 @@ class TimeHetNet(nn.Module):
     #                 [Metabatch samples X labels]
     def forward(self, inp):
         que_x, sup_x, sup_y = inp
-        sup_y = sup_y[:, :, :, 1:].reshape(sup_y.shape[0], sup_y.shape[1], -1)
+        # sup_y = sup_y[:, :, :, 1:].reshape(sup_y.shape[0], sup_y.shape[1], -1)
+        sup_y = sup_y.view(sup_y.shape[0], sup_y.shape[1], -1)
         
         M = torch._shape_as_tensor(sup_x)[0] # Batch (user_id)
         N = torch._shape_as_tensor(sup_x)[1] # Mini-Batch
