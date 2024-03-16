@@ -42,10 +42,12 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:3" if use_cuda else "cpu")
+device = torch.device("cuda:0" if use_cuda else "cpu")
 ##################################################
 
 ##### args
+args = argument_parser()
+
 model_type = 'mlp'
 model_type = 'time-hetnet'
 # model_type = 'hetnet'
@@ -68,15 +70,15 @@ min_length = 6
 time_delta = 20 # (minutes) 1 segment length
 # length = min_length * time_delta
 
-how_many = 14
+how_many = 28
 length = day * how_many
-y_timestep = day * 3
+y_timestep = day * 7
 
 x_attribute = 9
 label_attribute = 2
 
-sample_s = 10
-sample_q = 10
+sample_s = 5
+sample_q = 5
 
 batch_size = 500
 
@@ -146,8 +148,6 @@ train_list = user_list[0:1]
 validation_list = user_list[0:1]
 # test_list       = user_list[0:1]
 ##################################################
-
-args = argument_parser()
 
 def write_configruation(conf_file):
     #--------Write Configration--------

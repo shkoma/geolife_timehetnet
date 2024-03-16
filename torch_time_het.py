@@ -1,11 +1,14 @@
+import ast
 import os
 import numpy as np
 import torch
 from torch import nn
-# from torch.utils.data import DataLoader
+from args            import argument_parser
 import time
 
-global_first_feature = 64
+args = argument_parser()
+global_first_feature = ast.literal_eval(args.dims)[0]
+
 class My_Linear(nn.Module):
     def __init__(self, in_features, out_features, bias=True, device=None, name=None):
         super(My_Linear, self).__init__()
