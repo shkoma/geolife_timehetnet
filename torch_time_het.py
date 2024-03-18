@@ -6,9 +6,10 @@ from torch import nn
 from args            import argument_parser
 import time
 
-args = argument_parser()
-global_first_feature = ast.literal_eval(args.dims)[0]
+# args = argument_parser()
+# global_first_feature = ast.literal_eval(args.dims)[0]
 
+global_first_feature =  ast.literal_eval("[32, 32, 32]")[0]
 class My_Linear(nn.Module):
     def __init__(self, in_features, out_features, bias=True, device=None, name=None):
         super(My_Linear, self).__init__()

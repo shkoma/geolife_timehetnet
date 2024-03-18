@@ -66,6 +66,8 @@ class SegmentDataset(Dataset):
                 df = pd.read_csv(min_file)
 
                 df_1 = df[df.columns[2:].to_list()].copy()
+                df_1 = pd.concat([df_1, df.iloc[:, 0:2]], axis=1)
+
                 self.columns = df_1.columns.to_list()
                 self.sampleMinSet(df_1)
         return

@@ -61,8 +61,8 @@ cell = 256
 file_mode = 'min'
 
 # min
-round_min = 180
-day = 6 # 6*24
+round_min = 60 # 60, 120, 180
+day = int(24/int(round_min/60)) #8#24 # 6*24
 
 # sec
 round_sec = 10 # (seconds) per 10s
@@ -72,13 +72,13 @@ time_delta = 20 # (minutes) 1 segment length
 
 how_many = 28
 length = day * how_many
-y_timestep = day * 3
+y_timestep = day * 7
 
 x_attribute = 9
 label_attribute = 2
 
-sample_s = 3
-sample_q = 3
+sample_s = 5
+sample_q = 5
 
 batch_size = 500
 
@@ -87,7 +87,7 @@ args_epoch = 10000000
 args_lr = 0.001
 
 # be careful to control args_patience, it can be stucked in a local minimum point.
-args_patience = 1000
+args_patience = 1500
 
 args_factor = 0.1
 
