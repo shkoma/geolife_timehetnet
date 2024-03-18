@@ -61,8 +61,8 @@ cell = 256
 file_mode = 'min'
 
 # min
-round_min = 60
-day = 24 # 6*24
+round_min = 180
+day = 6 # 6*24
 
 # sec
 round_sec = 10 # (seconds) per 10s
@@ -72,13 +72,13 @@ time_delta = 20 # (minutes) 1 segment length
 
 how_many = 28
 length = day * how_many
-y_timestep = day * 7
+y_timestep = day * 3
 
 x_attribute = 9
 label_attribute = 2
 
-sample_s = 5
-sample_q = 5
+sample_s = 3
+sample_q = 3
 
 batch_size = 500
 
@@ -127,8 +127,8 @@ best_train_model = 'best_train_model.pth'
 ##### Time grid User list
 time_grid_csv = 'data/geolife/time_grid_sample.csv'
 user_df = pd.read_csv(time_grid_csv)
-# user_df = user_df.loc[user_df['time_grid'] > ((sample_s + sample_q) * how_many), :]
-user_df = user_df.loc[user_df['ratio'] > 10, :]
+ratio_var = 'ratio_' + str(round_min) + 'min'
+user_df = user_df.loc[user_df[ratio_var] > 10, :]
 locationPreprocessor = LocationPreprocessor('data/geolife/')
 user_list = []
 for user in user_df['user_id'].to_list():
@@ -155,6 +155,11 @@ def write_configruation(conf_file):
     conf_df = pd.DataFrame({'device':[device],
                             'model_type':[model_type],
                             'args_dims':[ast.literal_eval(args.dims)],
+                            'round_min': [round_min],
+                            'round_sec': [round_sec],
+                            'day': [day],
+                            'length': [length],
+                            'y_timestep': [y_timestep],
                             'loss_method':[loss_method],
                             'batch_size':[batch_size],
                             'hidden_layer':[hidden_layer],
@@ -165,12 +170,7 @@ def write_configruation(conf_file):
                             'patience':[args_patience],
                             'x_attribute':[x_attribute],
                             'file_mode':[file_mode],
-                            'day':[day],
-                            'round_min':[round_min],
-                            'round_sec':[round_sec],
                             'time_delta':[time_delta],
-                            'y_timestep':[y_timestep],
-                            'length':[length],
                             'train_list':[train_list],
                             'val_list':[validation_list],
                             'test_list':[test_list],
@@ -277,7 +277,7 @@ if is_train == True:
                 mask, y_true = task_y
                 output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
                 y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
-                loss = criterion(y_true[y_true[:, :, :, 0] == 1], output[output[:, :, :, 0] == 1])
+                loss = criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])
 
             loss_train += loss.item()
             loss.backward()
@@ -303,7 +303,7 @@ if is_train == True:
                     mask, y_true = y_val
                     output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
                     y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
-                    val_loss = criterion(y_true[y_true[:, :, :, 0] == 1], output[output[:, :, :, 0] == 1])
+                    val_loss = criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])
 
                 loss_val += val_loss.item()
 

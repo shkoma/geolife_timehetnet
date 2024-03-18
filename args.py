@@ -44,8 +44,8 @@ def argument_parser():
     
     ####### Model args #########
 
-    parser.add_argument('--dims',        help='A list of model weights for hetnet', default="[64,64,64]", type=str)
-    parser.add_argument('--dims_pred',   help='A list of model weights for hetnet pred', default="[64,64,64]", type=str)
+    parser.add_argument('--dims',        help='A list of model weights for hetnet', default="[32,32,32]", type=str)
+    parser.add_argument('--dims_pred',   help='A list of model weights for hetnet pred', default="[32,32,32]", type=str)
     # parser.add_argument('--hetmodel',    help='Type of hetnet (normal or time)', default="time", type=str)
     parser.add_argument('--hetmodel',    help='Type of hetnet (normal or time)', default="normal", type=str)
     parser.add_argument('--batchnorm',  help='Batchnorm for TimeHetNet',  default="False" , type=boolean_string)

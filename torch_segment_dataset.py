@@ -66,7 +66,6 @@ class SegmentDataset(Dataset):
                 df = pd.read_csv(min_file)
 
                 df_1 = df[df.columns[2:].to_list()].copy()
-                df_1 = pd.concat([df_1, df.iloc[:, 0:2]], axis=1)  # x, y
                 self.columns = df_1.columns.to_list()
                 self.sampleMinSet(df_1)
         return
@@ -75,26 +74,42 @@ class SegmentDataset(Dataset):
         user_df = dataset.copy()
         total_samps = self.sample_s + self.sample_q
 
+        grid_days = np.arange(int(user_df.shape[0] / self.day) - int(self.length/self.day))
+        grid_days = grid_days[0:(grid_days.shape[0]//total_samps) * total_samps]
+        grid_days = grid_days.reshape(-1, total_samps)
+        sample_list = np.arange(grid_days.shape[0])
+
+        random.shuffle(sample_list)
+        print(f"day: {self.day}, grid_days: {grid_days.shape}, sample's len: {sample_list.shape}")
+
         mini_batch = []
-
-        grid_days = np.arange(int(user_df.shape[0] / self.day) - int(self.length / self.day))
-        # grid_days = np.arange(int(user_df.shape[0] / self.length))
-        random.shuffle(grid_days)
-        print(f"user_df: {user_df.shape[0]}, day: {self.day}, grid_day's len: {len(grid_days)}")
-
         count = 0
-        for idx in grid_days:
-            count += 1
-            index = idx * self.day
-            cur_sample = user_df.iloc[index:index + self.length, :]
-            mini_batch.append(cur_sample)
+        for row_idx in sample_list:
+            for col_idx in grid_days[row_idx,:]:
+                count += 1
+                index = row_idx*total_samps + col_idx*self.day
+                cur_sample = user_df.iloc[index:index + self.length, :]
+                if cur_sample.shape[0] != self.length:
+                    # print(f'cur_sample is wrong')
+                    return
+                mini_batch.append(cur_sample)
 
-            if count % total_samps == 0:
+            if len(mini_batch) == total_samps:
                 self.full_user_data_list.append(np.array(mini_batch))
                 mini_batch = []
-                if len(grid_days) - count < total_samps:
-                    print(f"full_user_data_list: {len(self.full_user_data_list)}")
-                    return
+        # count = 0
+        # for idx in grid_days:
+        #     count += 1
+        #     index = idx * self.day
+        #     cur_sample = user_df.iloc[index:index + self.length, :]
+        #     mini_batch.append(cur_sample)
+        #
+        #     if count % total_samps == 0:
+        #         self.full_user_data_list.append(np.array(mini_batch))
+        #         mini_batch = []
+        #         if len(grid_days) - count < total_samps:
+        #             print(f"full_user_data_list: {len(self.full_user_data_list)}")
+        #             return
         return
 
     def sampleSet(self, dataset, user_id):
