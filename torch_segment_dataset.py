@@ -1,4 +1,3 @@
-import os
 import pandas as pd
 import numpy as np
 import random
@@ -22,19 +21,10 @@ class SegmentDataset(Dataset):
         self.sample_q = sample_q
         self.file_mode = file_mode
         self.columns = []
+        self.full_user_data_list = [] # user together, min mode
 
-        if self.file_mode == 'sec':
-            self.sec_csv = '_origin_grid_' + str(self.round_sec) + 's.csv'
-            self.segment_file = '_segment_list_' + str(self.time_delta) +'min.csv'
-        else:
-            # round_min
-            self.min_csv = '_origin_grid_' + str(self.round_min) + 'min.csv'
-            self.min_file = str(self.data_dir) + str(self.user_list[0]) + '/csv/' + str(
-                self.user_list[0]) + self.min_csv
-
-        self.data_mode = 'full'
-        self.user_data_list = []
-        self.full_user_data_list = [] # user together, in sec mode and min mode
+        # round_min
+        self.min_csv = '_origin_grid_' + str(self.round_min) + 'min.csv'
         self.loadUserData()
 
     def get_train_columns(self):
@@ -42,34 +32,15 @@ class SegmentDataset(Dataset):
 
     def loadUserData(self):
         for user_id in self.user_list:
-            if self.file_mode == 'sec':
-                csv_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.sec_csv
-                df = pd.read_csv(csv_file)
-                df = df.drop(columns=['time_diff'])
+            # min
+            min_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.min_csv
+            df = pd.read_csv(min_file)
 
-                day_column = 10
-                df_1 = df[df.columns[0:day_column].to_list()].copy()
-                df_1 = pd.concat([df_1, df.iloc[:, day_column+4:day_column+6]], axis=1)  # 500m
-                df_1 = pd.concat([df_1, df.iloc[:, day_column+2:day_column+4]], axis=1)  # 100m
-                df_1 = pd.concat([df_1, df.iloc[:, day_column+6:day_column+8]], axis=1)  # 1000m
-                df_1 = df_1.drop(columns=['x', 'y'])
-                df_1 = pd.concat([df_1, df.iloc[:, 1:3]], axis=1)  # x, y
-                self.columns = df_1.columns.to_list()
+            df_1 = df[df.columns[2:].to_list()].copy()
+            df_1 = pd.concat([df_1, df.iloc[:, 0:2]], axis=1)
 
-                if self.data_mode == 'full':
-                    self.fullSampleSet(df_1, user_id)
-                else:
-                    self.user_data_list.append(self.sampleSet(df_1, user_id))
-            else:
-                # min
-                min_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.min_csv
-                df = pd.read_csv(min_file)
-
-                df_1 = df[df.columns[2:].to_list()].copy()
-                df_1 = pd.concat([df_1, df.iloc[:, 0:2]], axis=1)
-
-                self.columns = df_1.columns.to_list()
-                self.sampleMinSet(df_1)
+            self.columns = df_1.columns.to_list()
+            self.sampleMinSet(df_1)
         return
 
     def sampleMinSet(self, dataset):
@@ -82,7 +53,7 @@ class SegmentDataset(Dataset):
         sample_list = np.arange(grid_days.shape[0])
 
         random.shuffle(sample_list)
-        print(f"day: {self.day}, grid_days: {grid_days.shape}, sample's len: {sample_list.shape}")
+        # print(f"day: {self.day}, grid_days: {grid_days.shape}, sample's len: {sample_list.shape}")
 
         mini_batch = []
         count = 0
@@ -99,105 +70,11 @@ class SegmentDataset(Dataset):
             if len(mini_batch) == total_samps:
                 self.full_user_data_list.append(np.array(mini_batch))
                 mini_batch = []
-        # count = 0
-        # for idx in grid_days:
-        #     count += 1
-        #     index = idx * self.day
-        #     cur_sample = user_df.iloc[index:index + self.length, :]
-        #     mini_batch.append(cur_sample)
-        #
-        #     if count % total_samps == 0:
-        #         self.full_user_data_list.append(np.array(mini_batch))
-        #         mini_batch = []
-        #         if len(grid_days) - count < total_samps:
-        #             print(f"full_user_data_list: {len(self.full_user_data_list)}")
-        #             return
-        return
-
-    def sampleSet(self, dataset, user_id):
-        user_df = dataset.copy()
-        segment_df = pd.read_csv(str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.segment_file)
-        segment_list = segment_df['segment_list'].to_list()
-
-        if len(self.columns) < 1:
-            # just for log
-            self.columns = user_df.columns.to_list()
-
-        # segment_list 기반, sample 추출하여 mini-batch 형성
-        mini_batch = []
-
-        total_samps = self.sample_s + self.sample_q
-        
-        replace = False
-        if total_samps > len(segment_list):
-            replace = True
-
-        segment_list = np.random.choice(segment_list, size=total_samps, replace=replace)
-
-        for seg_num in segment_list:
-            seg_df = user_df.loc[user_df['segment'] == seg_num, :]
-            seg_df = seg_df.drop(columns=['segment'])
-            if seg_df.shape[0] < self.length:
-                # segment 길이가 짧다면, zero padding 진행
-                fill_quota  = np.abs(self.length - seg_df.shape[0])
-                zeros_r     = np.zeros([fill_quota, seg_df.shape[1]])
-                cur_sample  = np.concatenate([zeros_r, seg_df], axis = 0)
-                mini_batch.append(cur_sample)
-            else:
-                # segment 에서 요구된 길이만큼 추출
-                cur_sample = seg_df.iloc[:self.length, :]
-                mini_batch.append(cur_sample)
-
-        return np.array(mini_batch)
-
-    def fullSampleSet(self, dataset, user_id):
-        user_df = dataset.copy()
-        segment_df = pd.read_csv(str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.segment_file)
-        segment_list = segment_df['segment_list'].to_list()
-
-        if len(self.columns) < 1:
-            # just for log
-            self.columns = user_df.columns.to_list()
-
-        # segment_list 기반, sample 추출하여 mini-batch 형성
-        mini_batch = []
-
-        total_samps = self.sample_s + self.sample_q
-
-        count = 0
-        for seg_num in segment_list:
-            if count != 0 and count % total_samps == 0:
-                self.full_user_data_list.append(np.array(mini_batch))
-                mini_batch = []
-                if len(segment_list) - count < total_samps:
-                    return
-            count += 1
-
-            seg_df = user_df.loc[user_df['segment'] == seg_num, :]
-            seg_df = seg_df.drop(columns=['segment'])
-            if seg_df.shape[0] < self.length:
-                # segment 길이가 짧다면, zero padding 진행
-                fill_quota = np.abs(self.length - seg_df.shape[0])
-                zeros_r = np.zeros([fill_quota, seg_df.shape[1]])
-                cur_sample = np.concatenate([zeros_r, seg_df], axis=0)
-                mini_batch.append(cur_sample)
-            else:
-                # segment 에서 요구된 길이만큼 추출
-                cur_sample = seg_df.iloc[:self.length, :]
-                mini_batch.append(cur_sample)
         return
 
     def __getitem__(self, index):
         # masking y_timestpe in task_X
-        if self.file_mode == 'sec':
-            if self.data_mode == 'full':
-                task_X = self.full_user_data_list[index].copy()
-            else:
-                task_X = self.user_data_list[index].copy()
-        else:
-            # min
-            task_X = self.full_user_data_list[index].copy()
-
+        task_X = self.full_user_data_list[index].copy()
         task_y = task_X[:, -self.y_timestep:, -(self.label_attribute+1):].copy()
 
         if self.y_timestep > 0:
@@ -224,11 +101,4 @@ class SegmentDataset(Dataset):
         # batch를 구성할 수 있는 총 수
         # 이 수에서 batch를 조정할 수 있다.
         # 몇 명의 user 로 나눠서 할 지
-        if self.file_mode == 'sec':
-            if self.data_mode == 'full':
-                length = len(self.full_user_data_list)
-            else:
-                length = len(self.user_data_list)
-        else: # min
-            length = len(self.full_user_data_list)
-        return length
+        return len(self.full_user_data_list)

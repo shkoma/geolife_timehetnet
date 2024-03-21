@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import datetime
+import shutil
 
 import torch
 from torch import nn
@@ -31,10 +32,9 @@ def metricMenhattan(y_true, y_pred):
     return torch.sum(row + col)
 
 def metricEuclidean(y_true, y_pred):
-    row = (y_pred[:,:,:,0] - y_true[:,:,:,0])**2
-    col = (y_pred[:,:,:,1] - y_true[:,:,:,1])**2
-    return torch.sum((row + col)**0.5)
-
+    row = (y_pred[:,1] - y_true[:,1])**2
+    col = (y_pred[:,2] - y_true[:,2])**2
+    return torch.mean((row+col)**0.5)
 def make_Tensorboard_dir(dir_name, dir_format):
     root_logdir = os.path.join(os.curdir, dir_name)
     sub_dir_name = datetime.datetime.now().strftime(dir_format)
@@ -42,7 +42,7 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:2" if use_cuda else "cpu")
+device = torch.device("cuda:3" if use_cuda else "cpu")
 ##################################################
 
 ##### args
@@ -83,7 +83,7 @@ sample_q = 5
 batch_size = 500
 
 args_early_stopping = True
-args_epoch = 10000000
+args_epoch = 100000
 args_lr = 0.001
 
 # be careful to control args_patience, it can be stucked in a local minimum point.
@@ -103,14 +103,17 @@ data_dir = "data/geolife/Data/"
 # tensorboard start
 # ./tensorboard --logdir=data/geolife/runs
 writer_dir_name = 'data/geolife/runs'
-dir_format = '[segment_multi_' + model_type + ']_%Y%m%d-%H%M%S'
+dir_format = '[segment_fold_' + model_type + ']_%Y%m%d-%H%M%S'
 configuration_file = 'configuration.csv'
+
+writer_dir = make_Tensorboard_dir(writer_dir_name, dir_format)
 ##################################################
 
 ##### Train Phase
 is_train = True
 best_model_path = 'best_model.pth'
 best_train_model = 'best_train_model.pth'
+total_best_model_path = writer_dir + "/" + '_total_best_model.pth'
 ##################################################
 
 ##### Time grid User list
@@ -133,78 +136,77 @@ train_list      = user_list[0:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):]
 
-train_list = user_list[1:5]
-validation_list = user_list[0:1]
-test_list       = user_list[0:1]
-##################################################
+num_fold = 5
+k_fold_list = user_list[0:num_fold]
 
-def write_configruation(conf_file):
-    #--------Write Configration--------
-    import pandas as pd
-    conf_df = pd.DataFrame({'device':[device],
-                            'model_type':[model_type],
-                            'args_dims':[ast.literal_eval(args.dims)],
-                            'round_min': [round_min],
-                            'round_sec': [round_sec],
-                            'day': [day],
-                            'length': [length],
-                            'y_timestep': [y_timestep],
-                            'loss_method':[loss_method],
-                            'batch_size':[batch_size],
-                            'hidden_layer':[hidden_layer],
-                            'cell':[cell],
-                            'label_attribute':[label_attribute],
-                            'sample_s':[sample_s],
-                            'sample_q':[sample_q],
-                            'epoch':[args_epoch],
-                            'patience':[args_patience],
-                            'x_attribute':[x_attribute],
-                            'file_mode':[file_mode],
-                            'time_delta':[time_delta],
-                            'train_list':[train_list],
-                            'val_list':[validation_list],
-                            'test_list':[test_list],
-                            'train_columns':[training_data.get_train_columns()]})
-    conf_df.to_csv(conf_file, index=False)
-
+writer = SummaryWriter(writer_dir)
 print("##################################################################")
 print(f"use_cuda: {use_cuda}, device: {device}")
 print(f"model_type: {model_type}")
-
-print(f"train len: {train_len}")
-print(f"validation len: {validation_len}")
-print(f"test len: {len(test_list)}")
-
-print(f"train: [{train_list}]")
-print(f"validation: [{validation_list}]")
-print(f"test: [{test_list}]")
-
 print("Building Network ...")
 
-# Dataset
-if model_type == 'mlp':
-    training_data           = MlpDataset('train', data_dir, train_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
-    validation_data         = MlpDataset('valid', data_dir, validation_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
-    test_data               = MlpDataset('test', data_dir, test_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
-    train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
-    validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
-    test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
-else:
-    training_data           = SegmentDataset(model_type, data_dir, train_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
-    validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
-    test_data               = SegmentDataset(model_type, data_dir, test_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
-    train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
-    validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
-    test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
+best_dist = float("inf")
+for fold_idx in range(num_fold):
+    train_list = []
+    test_list = []
+    for user_id in user_list[:num_fold]:
+        if user_list[fold_idx] != user_id:
+            train_list += [user_id]
+        else:
+            test_list += [user_id]
+    print(f"*****************************************")
+    print(f'{fold_idx}_fold start')
+    print(f'train_list: {train_list}')
+    print(f'test_list: {test_list}')
+##################################################
 
-if is_train == True:
-    print('Start Train')
+    def write_configruation(conf_file):
+        #--------Write Configration--------
+        import pandas as pd
+        conf_df = pd.DataFrame({'device':[device],
+                                'model_type':[model_type],
+                                'args_dims':[ast.literal_eval(args.dims)],
+                                'round_min': [round_min],
+                                'day': [day],
+                                'length': [length],
+                                'y_timestep': [y_timestep],
+                                'loss_method':[loss_method],
+                                'batch_size':[batch_size],
+                                'hidden_layer':[hidden_layer],
+                                'cell':[cell],
+                                'label_attribute':[label_attribute],
+                                'sample_s':[sample_s],
+                                'sample_q':[sample_q],
+                                'epoch':[args_epoch],
+                                'patience':[args_patience],
+                                'x_attribute':[x_attribute],
+                                'train_list':[train_list],
+                                'val_list':[validation_list],
+                                'test_list':[test_list],
+                                'train_columns':[training_data.get_train_columns()]})
+        conf_df.to_csv(conf_file, index=False)
+
+    # Dataset
+    if model_type == 'mlp':
+        training_data           = MlpDataset('train', data_dir, train_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
+        validation_data         = MlpDataset('valid', data_dir, validation_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
+        test_data               = MlpDataset('test', data_dir, test_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
+        train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
+        validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
+        test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
+    else:
+        training_data           = SegmentDataset(model_type, data_dir, train_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
+        validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
+        test_data               = SegmentDataset(model_type, data_dir, test_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
+        train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
+        validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
+        test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
+
+    # print('Start Train')
     #--------Define Tensorboard--------
-    writer_dir = make_Tensorboard_dir(writer_dir_name, dir_format)
-    writer = SummaryWriter(writer_dir)
-
-    best_model_path = writer_dir + "/" + best_model_path
-    best_train_model = writer_dir + "/" + best_train_model
+    # writer_dir = make_Tensorboard_dir(writer_dir_name, dir_format)
+    # writer = SummaryWriter(writer_dir)
+    best_model_path = writer_dir + "/" + str(fold_idx) + '_fold_best_model.pth'
 
     #--------Define a Model
     if model_type == 'mlp':
@@ -258,11 +260,12 @@ if is_train == True:
     #------- Train the model -----------------
     best_val_loss = float("inf")
     best_train_loss = float("inf")
-    no_improvement = 0
 
     model = model.to(torch.double)
     model = model.to(device)
 
+    title_train_loss = str(fold_idx) + '_fold training loss'
+    title_test_loss = str(fold_idx) + '_fold test loss'
     for epoch in range(args_epoch):
         print(f"epoch: {epoch}")
 
@@ -288,69 +291,76 @@ if is_train == True:
             optimizer.step()
 
         if epoch % 100 == 1:
-            writer.add_scalar('training loss', loss_train, epoch)
+            writer.add_scalar(title_train_loss, loss_train, epoch)
 
         model.eval()
         if epoch == 0:
+            configuration_file = str(fold_idx)+ '_fold_configuration.csv'
             write_configruation(writer_dir + "/" + configuration_file)
 
-        loss_val = 0.0
+        loss_test = 0.0
         with torch.no_grad():
-            for val_idx, val_data in enumerate(validation_dataloader, 0):
-                X_val, y_val = val_data
-                output = model(X_val)
+            for test_idx, test_data in enumerate(test_dataloader, 0):
+                test_X, test_y = test_data
+                output = model(test_X)
 
                 if model_type == 'mlp':
-                    output = torch.concat([torch.unsqueeze(y_val[:, :, 0], -1), output], axis=-1)
-                    val_loss = criterion(y_val[y_val[:, :, 0] == 1], output[output[:, :, 0] == 1])
+                    output = torch.concat([torch.unsqueeze(test_y[:, :, 0], -1), output], axis=-1)
+                    loss = criterion(test_y[test_y[:, :, 0] == 1], output[output[:, :, 0] == 1])
                 else:
-                    mask, y_true = y_val
+                    mask, y_true = test_y
                     output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
                     y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
-                    val_loss = criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])
+                    loss = criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])
 
-                loss_val += val_loss.item()
+                loss_test += loss.item()
 
             if epoch % 100 == 1:
-                writer.add_scalar('validation loss', loss_val, epoch)
-            print(f"train loss: {loss_train}, validation loss: {loss_val}")
-            lr_scheduler.step(loss_val)
+                writer.add_scalar(title_test_loss, loss_test, epoch)
+            print(f"train loss: {loss_train}, test loss: {loss_test}")
+            lr_scheduler.step(loss_test)
 
-        if loss_val < best_val_loss:
-            best_val_loss = loss_val
-            no_improvement = 0
+        if loss_test < best_val_loss:
+            best_val_loss = loss_test
             print('save best weight and bias')
             torch.save(model.state_dict(), best_model_path)
-        else:
-            no_improvement += 1
 
         if loss_train < best_train_loss:
             best_train_loss = loss_train
             print('save best train model')
-            torch.save(model.state_dict(), best_train_model)
 
-        # Test mode
-        if epoch % 300 == 1:
-            test_model.load_state_dict(torch.load(best_model_path))
-            test_model = test_model.to(device)
-            test_model.eval()
+    # Test mode
+    test_model.load_state_dict(torch.load(best_model_path))
+    test_model = test_model.to(device)
+    criterion = metricEuclidean
+    test_model.eval()
 
-            with torch.no_grad():
-                loss_test = 0.0
-                for idx, test_data in enumerate(test_dataloader, 0):
-                    test_X, test_y = test_data
-                    output = test_model(test_X)
+    mean_dist = 0.0
+    with torch.no_grad():
+        for idx, test_data in enumerate(test_dataloader, 0):
+            test_X, test_y = test_data
+            output = test_model(test_X)
 
-                    if model_type == 'mlp':
-                        output = torch.concat([torch.unsqueeze(test_y[:, :, 0], -1), output], axis=-1)
-                        loss = criterion(test_y[test_y[:, :, 0] == 1], output[output[:, :, 0] == 1])
-                    else:
-                        mask, y_true = test_y
-                        output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
-                        y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
-                        loss = criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])
+            if model_type == 'mlp':
+                output = torch.concat([torch.unsqueeze(test_y[:, :, 0], -1), output], axis=-1)
+                dist = criterion(test_y[test_y[:, :, 0] == 1], output[output[:, :, 0] == 1])
+            else:
+                mask, y_true = test_y
+                output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
+                y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
+                dist = criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])
 
-                    loss_test += loss.item()
-                    writer.add_scalar('Test loss', loss_test, epoch)
-                    print(f"test loss: {loss_test}")
+            mean_dist += dist.item()
+    title_euclidean = str(fold_idx) + '_Euclidean Dist'
+    writer.add_scalar(title_euclidean, mean_dist, fold_idx)
+
+    print(f"fold-{fold_idx}")
+    print(f"Euclidean distance: {mean_dist}")
+
+    total_best_model_path = writer_dir + "/" + 'total_best_model.pth'
+    if mean_dist >= 0.001 and best_dist > mean_dist:
+        best_dist = mean_dist
+        shutil.copyfile(best_model_path, total_best_model_path)
+        print('save total best model')
+
 print('Finish Train')
