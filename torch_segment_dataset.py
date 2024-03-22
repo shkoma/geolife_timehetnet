@@ -47,13 +47,41 @@ class SegmentDataset(Dataset):
         user_df = dataset.copy()
         total_samps = self.sample_s + self.sample_q
 
+        grid_mins = np.arange(user_df.shape[0] - self.length)
+        grid_mins = grid_mins[0:(grid_mins.shape[0]//(total_samps*self.length)) * (total_samps*self.length)]
+        grid_mins = grid_mins.reshape(-1, total_samps)
+        sample_list = np.arange(grid_mins.shape[0])
+
+        random.shuffle(sample_list)
+        # print(f"day: {self.day}, grid_days: {grid_days.shape}, sample's len: {sample_list.shape}")
+
+        mini_batch = []
+        count = 0
+        for row_idx in sample_list:
+            for col_idx in grid_mins[row_idx,:]:
+                count += 1
+                # index = row_idx*total_samps + col_idx
+                cur_sample = user_df.iloc[col_idx:col_idx + self.length, :]
+                if cur_sample.shape[0] != self.length:
+                    print(f'cur_sample is wrong')
+                    continue
+                mini_batch.append(cur_sample)
+
+            if len(mini_batch) == total_samps:
+                self.full_user_data_list.append(np.array(mini_batch))
+                mini_batch = []
+        return
+
+    def sampleDaySet(self, dataset):
+        user_df = dataset.copy()
+        total_samps = self.sample_s + self.sample_q
+
         grid_days = np.arange(int(user_df.shape[0] / self.day) - int(self.length/self.day))
         grid_days = grid_days[0:(grid_days.shape[0]//total_samps) * total_samps]
         grid_days = grid_days.reshape(-1, total_samps)
         sample_list = np.arange(grid_days.shape[0])
 
         random.shuffle(sample_list)
-        # print(f"day: {self.day}, grid_days: {grid_days.shape}, sample's len: {sample_list.shape}")
 
         mini_batch = []
         count = 0
