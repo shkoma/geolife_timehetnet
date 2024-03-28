@@ -255,7 +255,7 @@ for fold_idx in reversed(range(num_fold)):
                                           label_attribute=label_attribute, 
                                           sample_s=sample_s, 
                                           sample_q=sample_q)
-        validation_data = TrajectoryDataset(data_mode='valid',
+        validation_data = TrajectoryDataset(data_mode='test',
                                           user_list_type=user_list_type, 
                                           data_dir=data_dir, 
                                           user_list=validation_list, 

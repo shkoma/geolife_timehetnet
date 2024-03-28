@@ -43,7 +43,7 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:1" if use_cuda else "cpu")
+device = torch.device("cuda:0" if use_cuda else "cpu")
 ##################################################
 
 ##### args
@@ -69,19 +69,19 @@ day = int(24/int(round_min/60)) #8#24 # 6*24
 day_divide = day
 
 # sec
-round_sec = 10 # (seconds) per 10s
-min_length = 6
+round_sec = 30 # (seconds) per 10s
+min_length = 2
 time_delta = 20 # (minutes) 1 segment length
 # length = min_length * time_delta
 
 how_many = 3
-length = day * how_many
-y_timestep = 6
+length = 20 * min_length#day * how_many
+y_timestep = 5 * min_length
 
 x_attribute = 9
 label_attribute = 2
 
-sample_s = 5
+sample_s = 4
 sample_q = 1
 
 batch_size = 150
@@ -214,9 +214,46 @@ if model_type == 'mlp':
     validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
     test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
 else:
-    training_data           = SegmentDataset('train', user_list_type, data_dir, train_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
-    validation_data         = SegmentDataset('test', user_list_type, data_dir, validation_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
-    test_data               = SegmentDataset('test', user_list_type, data_dir, test_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
+    # training_data           = SegmentDataset('train', user_list_type, data_dir, train_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
+    # validation_data         = SegmentDataset('test', user_list_type, data_dir, validation_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
+    # test_data               = SegmentDataset('test', user_list_type, data_dir, test_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
+    from torch_trajectory_dataset import TrajectoryDataset
+    train_list = ['035']
+    validation_list = ['035']
+    test_list       = ['035']
+    training_data = TrajectoryDataset(data_mode='train',
+                                        user_list_type=user_list_type, 
+                                        data_dir=data_dir, 
+                                        user_list=train_list, 
+                                        device=device, 
+                                        round_sec=round_sec, 
+                                        y_timestep=y_timestep, 
+                                        length=length, 
+                                        label_attribute=label_attribute, 
+                                        sample_s=sample_s, 
+                                        sample_q=sample_q)
+    validation_data = TrajectoryDataset(data_mode='test',
+                                        user_list_type=user_list_type, 
+                                        data_dir=data_dir, 
+                                        user_list=validation_list, 
+                                        device=device, 
+                                        round_sec=round_sec, 
+                                        y_timestep=y_timestep, 
+                                        length=length, 
+                                        label_attribute=label_attribute, 
+                                        sample_s=sample_s, 
+                                        sample_q=sample_q)
+    test_data = TrajectoryDataset(data_mode='test',
+                                        user_list_type=user_list_type, 
+                                        data_dir=data_dir, 
+                                        user_list=test_list, 
+                                        device=device, 
+                                        round_sec=round_sec, 
+                                        y_timestep=y_timestep, 
+                                        length=length, 
+                                        label_attribute=label_attribute, 
+                                        sample_s=sample_s, 
+                                        sample_q=sample_q)
     train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
     validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
     test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
@@ -227,7 +264,7 @@ if is_train == True:
     print('Start Train')
 
     #------- Init Wandb -------
-    wandb.init(project='geolife_timehetnet', config=config)
+    # wandb.init(project='geolife_timehetnet', config=config)
 
     #--------Define Tensorboard--------
     # writer_dir = make_Tensorboard_dir(writer_dir_name, dir_format)

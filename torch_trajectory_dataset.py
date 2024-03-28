@@ -20,8 +20,16 @@ class TrajectoryDataset(Dataset):
         self.columns = []
         self.full_user_data_list = [] # user together, min mode
 
-        # round_min
-        self.csv_file = '_segment_output_' + str(self.round_sec) + 's.csv'
+        if self.user_list_type == 'single':
+            if self.data_mode == 'train':
+                self.csv_file = '_train_output_' + str(self.round_sec) + 's.csv'
+            elif self.data_mode == 'valid':
+                self.csv_file = '_valid_output_' + str(self.round_sec) + 's.csv'
+            elif self.data_mode == 'test':
+                self.csv_file = '_test_output_' + str(self.round_sec) + 's.csv'
+        else:
+            # round_min
+            self.csv_file = '_segment_output_' + str(self.round_sec) + 's.csv'
         self.loadUserData()
 
     def get_train_columns(self):
