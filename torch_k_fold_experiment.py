@@ -15,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch_mlp import MLP
 from torch_mlp_dataset import MlpDataset
 from torch_segment_dataset import SegmentDataset
+from torch_trajectory_dataset import TrajectoryDataset
 from data.geolife.convert_minmax_location import LocationPreprocessor
 
 from args            import argument_parser
@@ -42,7 +43,7 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:3" if use_cuda else "cpu")
+device = torch.device("cuda:0" if use_cuda else "cpu")
 ##################################################
 
 ##### args
@@ -59,8 +60,6 @@ loss_method = 'mse'
 hidden_layer = 5
 cell = 256
 
-file_mode = 'min'
-
 # min
 round_min = 60 # 60, 120, 180
 day = int(24/int(round_min/60)) #8#24 # 6*24
@@ -68,19 +67,20 @@ day = int(24/int(round_min/60)) #8#24 # 6*24
 day_divide = int(day//6)
 
 # sec
-round_sec = 10 # (seconds) per 10s
-min_length = 6
+round_sec = 30 # (seconds) per 10s
+min_length = 2
 time_delta = 20 # (minutes) 1 segment length
 # length = min_length * time_delta
 
-how_many = 7
-length = day * how_many
-y_timestep = int(day/4)
+# how_many = 7
+# length = day * how_many
+length = 20 * min_length
+y_timestep = 5 * min_length
 
 x_attribute = 9
 label_attribute = 2
 
-sample_s = 5
+sample_s = 4
 sample_q = 1
 
 batch_size = 50
@@ -120,16 +120,27 @@ best_train_model = 'best_train_model.pth'
 total_best_model_path = writer_dir + "/" + '_total_best_model.pth'
 ##################################################
 
-##### Time grid User list
-time_grid_csv = 'data/geolife/time_grid_sample.csv'
+##### Full sample User list
+time_grid_csv = 'data/geolife/full_sample_user_list.csv'
 user_df = pd.read_csv(time_grid_csv)
-ratio_var = 'ratio_' + str(round_min) + 'min'
-user_df = user_df.loc[user_df[ratio_var] > 10, :]
+# user_df = user_df.loc[user_df['sample'], :]
 locationPreprocessor = LocationPreprocessor('data/geolife/')
 user_list = []
 for user in user_df['user_id'].to_list():
     user_list += [locationPreprocessor.getUserId(user)]
 print(f"user_list: {user_list}")
+##################################################
+
+##### Time grid User list
+# time_grid_csv = 'data/geolife/time_grid_sample.csv'
+# user_df = pd.read_csv(time_grid_csv)
+# ratio_var = 'ratio_' + str(round_min) + 'min'
+# user_df = user_df.loc[user_df[ratio_var] > 10, :]
+# locationPreprocessor = LocationPreprocessor('data/geolife/')
+# user_list = []
+# for user in user_df['user_id'].to_list():
+#     user_list += [locationPreprocessor.getUserId(user)]
+# print(f"user_list: {user_list}")
 ##################################################
 
 ##### Train - Validation user list
@@ -140,7 +151,7 @@ train_list      = user_list[0:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):]
 
-num_fold = 7
+num_fold = 5
 k_fold_list = user_list[0:num_fold]
 
 writer = SummaryWriter(writer_dir)
@@ -165,11 +176,11 @@ print(f"model_type: {model_type}")
 print("Building Network ...")
 
 # ------- Init Wandb -------
-wandb.init(project='geolife_timehetnet', config=config)
+# wandb.init(project='geolife_timehetnet', config=config)
 
 best_dist = float("inf")
-# for fold_idx in reversed(range(num_fold)):
-for fold_idx in range(num_fold):
+for fold_idx in reversed(range(num_fold)):
+# for fold_idx in range(num_fold):
     train_list = []
     test_list = []
     for user_id in user_list[:num_fold]:
@@ -178,7 +189,7 @@ for fold_idx in range(num_fold):
         else:
             test_list += [user_id]
     print(f"*****************************************")
-    # fold_idx = num_fold - fold_idx
+    fold_idx = num_fold - fold_idx
     print(f'{fold_idx}_fold start')
     print(f'train_list: {train_list}')
     print(f'test_list: {test_list}')
@@ -211,6 +222,7 @@ for fold_idx in range(num_fold):
                                 'train_columns':[training_data.get_train_columns()]})
         conf_df.to_csv(conf_file, index=False)
 
+
     # Dataset
     if model_type == 'mlp':
         training_data           = MlpDataset('train', data_dir, train_list, y_timestep, day, day_divide, round_min, round_sec, label_attribute, length, device)
@@ -223,14 +235,48 @@ for fold_idx in range(num_fold):
         # training_data           = SegmentDataset("train", user_list_type, model_type, data_dir, train_list, device, day, day_divide, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
         # validation_data         = SegmentDataset("test", user_list_type, model_type, data_dir, validation_list, device, day, day_divide, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
         # test_data               = SegmentDataset("test", user_list_type, model_type, data_dir, test_list, device, day, day_divide, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
-        training_data = SegmentDataset('train', user_list_type, data_dir, train_list, device, day, day_divide,
-                                       round_min, round_sec, y_timestep, length, label_attribute, sample_s,
-                                       sample_q)
-        validation_data = SegmentDataset('test', user_list_type, data_dir, validation_list, device, day, day_divide,
-                                         round_min, round_sec, y_timestep, length, label_attribute,
-                                         sample_s, sample_q)
-        test_data = SegmentDataset('test', user_list_type, data_dir, test_list, device, day, day_divide, round_min,
-                                   round_sec, y_timestep, length, label_attribute, sample_s, sample_q,)
+        # training_data = SegmentDataset('train', user_list_type, data_dir, train_list, device, day, day_divide,
+        #                                round_min, round_sec, y_timestep, length, label_attribute, sample_s,
+        #                                sample_q)
+        # validation_data = SegmentDataset('test', user_list_type, data_dir, validation_list, device, day, day_divide,
+        #                                  round_min, round_sec, y_timestep, length, label_attribute,
+        #                                  sample_s, sample_q)
+        # test_data = SegmentDataset('test', user_list_type, data_dir, test_list, device, day, day_divide, round_min,
+        #                            round_sec, y_timestep, length, label_attribute, sample_s, sample_q,)
+
+        training_data = TrajectoryDataset(data_mode='train',
+                                          user_list_type=user_list_type, 
+                                          data_dir=data_dir, 
+                                          user_list=train_list, 
+                                          device=device, 
+                                          round_sec=round_sec, 
+                                          y_timestep=y_timestep, 
+                                          length=length, 
+                                          label_attribute=label_attribute, 
+                                          sample_s=sample_s, 
+                                          sample_q=sample_q)
+        validation_data = TrajectoryDataset(data_mode='valid',
+                                          user_list_type=user_list_type, 
+                                          data_dir=data_dir, 
+                                          user_list=validation_list, 
+                                          device=device, 
+                                          round_sec=round_sec, 
+                                          y_timestep=y_timestep, 
+                                          length=length, 
+                                          label_attribute=label_attribute, 
+                                          sample_s=sample_s, 
+                                          sample_q=sample_q)
+        test_data = TrajectoryDataset(data_mode='test',
+                                          user_list_type=user_list_type, 
+                                          data_dir=data_dir, 
+                                          user_list=test_list, 
+                                          device=device, 
+                                          round_sec=round_sec, 
+                                          y_timestep=y_timestep, 
+                                          length=length, 
+                                          label_attribute=label_attribute, 
+                                          sample_s=sample_s, 
+                                          sample_q=sample_q)
 
         train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
         validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
