@@ -12,6 +12,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
+from torch_args import ArgumentSet
 from torch_mlp import MLP
 from torch_mlp_dataset import MlpDataset
 from torch_segment_dataset import SegmentDataset
@@ -43,7 +44,7 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
+device = torch.device("cuda:1" if use_cuda else "cpu")
 ##################################################
 
 ##### args
@@ -69,26 +70,26 @@ day = int(24/int(round_min/60)) #8#24 # 6*24
 day_divide = day
 
 # sec
-round_sec = 30 # (seconds) per 10s
-min_length = 2
+round_sec = ArgumentSet.round_sec # (seconds) per 10s
+min_length = ArgumentSet.min
 time_delta = 20 # (minutes) 1 segment length
 # length = min_length * time_delta
 
 how_many = 3
-length = 20 * min_length#day * how_many
-y_timestep = 5 * min_length
+length = ArgumentSet.length#day * how_many
+y_timestep = ArgumentSet.y_timestep
 
 x_attribute = 9
 label_attribute = 2
 
-sample_s = 4
-sample_q = 1
+sample_s = ArgumentSet.sample_s
+sample_q = ArgumentSet.sample_q
 
-batch_size = 150
+batch_size = ArgumentSet.batch_size
 
 args_early_stopping = True
 args_epoch = 1500000
-args_lr = 0.0015
+args_lr = 0.001
 
 # be careful to control args_patience, it can be stucked in a local minimum point.
 args_patience = 1500000
@@ -142,6 +143,10 @@ test_list       = user_list[(train_len + validation_len):]
 train_list = user_list[2:3]
 validation_list = user_list[2:3]
 test_list       = user_list[2:3]
+
+train_list = ['035']
+validation_list = ['035']
+test_list = ['035']
 ##################################################
 
 config = {
@@ -150,7 +155,7 @@ config = {
     'epochs':args_epoch,
     'learning_rate':args_lr,
     'batch_size':batch_size,
-    'sample_size':sample_s,
+    'support_set':sample_s,
     'day':day,
     'day_divide':day_divide,
     'y_timestep':y_timestep,
@@ -195,9 +200,9 @@ print("##################################################################")
 print(f"use_cuda: {use_cuda}, device: {device}")
 print(f"model_type: {model_type}")
 
-print(f"train len: {train_len}")
-print(f"validation len: {validation_len}")
-print(f"test len: {len(test_list)}")
+# print(f"train len: {train_len}")
+# print(f"validation len: {validation_len}")
+# print(f"test len: {len(test_list)}")
 
 print(f"train: [{train_list}]")
 print(f"validation: [{validation_list}]")
@@ -218,9 +223,7 @@ else:
     # validation_data         = SegmentDataset('test', user_list_type, data_dir, validation_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
     # test_data               = SegmentDataset('test', user_list_type, data_dir, test_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
     from torch_trajectory_dataset import TrajectoryDataset
-    train_list = ['035']
-    validation_list = ['035']
-    test_list       = ['035']
+
     training_data = TrajectoryDataset(data_mode='train',
                                         user_list_type=user_list_type, 
                                         data_dir=data_dir, 
@@ -235,7 +238,7 @@ else:
     validation_data = TrajectoryDataset(data_mode='test',
                                         user_list_type=user_list_type, 
                                         data_dir=data_dir, 
-                                        user_list=validation_list, 
+                                        user_list=test_list,
                                         device=device, 
                                         round_sec=round_sec, 
                                         y_timestep=y_timestep, 
@@ -264,7 +267,7 @@ if is_train == True:
     print('Start Train')
 
     #------- Init Wandb -------
-    # wandb.init(project='geolife_timehetnet', config=config)
+    wandb.init(project='geolife_timehetnet', config=config)
 
     #--------Define Tensorboard--------
     # writer_dir = make_Tensorboard_dir(writer_dir_name, dir_format)

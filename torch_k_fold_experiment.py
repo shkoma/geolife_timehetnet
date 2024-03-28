@@ -162,7 +162,7 @@ config = {
     'epochs':args_epoch,
     'learning_rate':args_lr,
     'batch_size':batch_size,
-    'sample_size':sample_s,
+    'support_set':sample_s,
     'day':day,
     'day_divide':day_divide,
     'y_timestep':y_timestep,

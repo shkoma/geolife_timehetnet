@@ -51,7 +51,6 @@ class TrajectoryDataset(Dataset):
     def sampleFullSet(self, dataset):
         user_df = dataset.copy()
         total_samps = self.sample_s + self.sample_q
-        full_length = self.length * total_samps
 
         grid = np.arange(user_df.shape[0]//self.length//total_samps * total_samps)
         grid = grid.reshape(-1, total_samps)
