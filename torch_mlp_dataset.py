@@ -6,30 +6,29 @@ from torch.utils.data import Dataset
 
 
 class MlpDataset(Dataset):
-    def __init__(self, data_mode, data_dir, user_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode = 'min'):
+    def __init__(self, data_mode, data_dir, user_list, y_timestep, day, day_divide, round_min, round_sec, label_attribute, length, device):
         self.data_mode = data_mode
         self.data_dir = data_dir
         self.user_list = user_list
         self.y_timestep = y_timestep
         self.label_attribute = label_attribute
         self.day = day
+        self.day_divide = day_divide
         self.round_min = round_min
         self.round_sec = round_sec
-        self.time_delta = time_delta
         self.length = length
         self.device = device
-        self.file_mode = file_mode
         self.samples = []
 
         # round_min
-        # if self.data_mode == 'train':
-        #     self.min_csv = '_train_' + str(self.round_min) + 'min.csv'
-        # elif self.data_mode == 'valid':
-        #     self.min_csv = '_valid_' + str(self.round_min) + 'min.csv'
-        # elif self.data_mode == 'test':
-        #     self.min_csv = '_test_' + str(self.round_min) + 'min.csv'
-        # else:
-        self.min_csv = '_origin_grid_' + str(self.round_min) + 'min.csv'
+        if self.data_mode == 'train':
+            self.min_csv = '_train_' + str(self.round_min) + 'min.csv'
+        elif self.data_mode == 'valid':
+            self.min_csv = '_valid_' + str(self.round_min) + 'min.csv'
+        elif self.data_mode == 'test':
+            self.min_csv = '_test_' + str(self.round_min) + 'min.csv'
+        else:
+            self.min_csv = '_origin_grid_' + str(self.round_min) + 'min.csv'
 
         for user_id in self.user_list:
             self.min_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.min_csv
@@ -45,6 +44,19 @@ class MlpDataset(Dataset):
         return self.columns
 
     def sampleMinSet(self, dataset):
+        user_df = dataset.copy()
+
+        mins = int(self.day // self.day_divide)
+        days = np.arange(int(user_df.shape[0] / mins) - int(self.length))
+        random.shuffle(days)
+
+        for idx in days:
+            index = idx * mins
+            cur_sample = user_df.iloc[index:(index + self.length), :]
+            self.samples.append(cur_sample)
+        return
+
+    def sampleDaySet(self, dataset):
         user_df = dataset.copy()
 
         days = np.arange(int(user_df.shape[0] / self.day) - int(self.length/self.day))

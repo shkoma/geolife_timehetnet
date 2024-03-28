@@ -5,26 +5,34 @@ import torch
 from torch.utils.data import Dataset
 
 class SegmentDataset(Dataset):
-    def __init__(self, model_type, data_dir, user_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode='min'):
-        self.model_type = model_type
+    def __init__(self, data_mode, user_list_type, data_dir, user_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q):
+        self.data_mode = data_mode
+        self.user_list_type = user_list_type
         self.data_dir = data_dir
         self.user_list = user_list
         self.device = device
         self.day = day
+        self.day_divide = day_divide
         self.round_min = round_min
         self.round_sec = round_sec
-        self.time_delta = time_delta
         self.y_timestep = y_timestep
         self.length = length
         self.label_attribute = label_attribute
         self.sample_s = sample_s
         self.sample_q = sample_q
-        self.file_mode = file_mode
         self.columns = []
         self.full_user_data_list = [] # user together, min mode
 
-        # round_min
-        self.min_csv = '_origin_grid_' + str(self.round_min) + 'min.csv'
+        if self.user_list_type == 'single':
+            if self.data_mode == 'train':
+                self.min_csv = '_train_' + str(self.round_min) + 'min.csv'
+            elif self.data_mode == 'valid':
+                self.min_csv = '_valid_' + str(self.round_min) + 'min.csv'
+            elif self.data_mode == 'test':
+                self.min_csv = '_test_' + str(self.round_min) + 'min.csv'
+        else:
+            # round_min
+            self.min_csv = '_origin_grid_' + str(self.round_min) + 'min.csv'
         self.loadUserData()
 
     def get_train_columns(self):
@@ -41,29 +49,55 @@ class SegmentDataset(Dataset):
 
             self.columns = df_1.columns.to_list()
             self.sampleMinSet(df_1)
+            # self.sampleDaySet(df_1)
+        return
+
+    def sampleFullSet(self, dataset):
+        user_df = dataset.copy()
+        total_samps = self.sample_s + self.sample_q
+
+        grid = np.arange((user_df.shape[0]//self.length)//total_samps * total_samps)
+        grid = grid.reshape[-1, total_samps]
+        sample_list = np.arange(grid.shape[0])
+
+        random.shuffle(sample_list)
+
+        mini_batch = []
+        count = 0
+        for row_idx in sample_list:
+            for col_idx in grid[row_idx,:]:
+                count += 1
+                index = col_idx * self.length
+                cur_sample = user_df.iloc[index:index + self.length, :]
+                if cur_sample.shape[0] != self.length:
+                    continue
+                mini_batch.append(cur_sample)
+
+            if len(mini_batch) == total_samps:
+                self.full_user_data_list.append(np.array(mini_batch))
+                mini_batch = []
         return
 
     def sampleMinSet(self, dataset):
         user_df = dataset.copy()
         total_samps = self.sample_s + self.sample_q
 
-        grid_mins = np.arange(user_df.shape[0] - self.length)
-        grid_mins = grid_mins[0:(grid_mins.shape[0]//(total_samps*self.length)) * (total_samps*self.length)]
+        mins = int(self.day // self.day_divide)
+        grid_mins = np.arange(int(user_df.shape[0]/mins) - int(self.length/mins * total_samps))
+        grid_mins = grid_mins[:grid_mins.shape[0]//total_samps * total_samps]
         grid_mins = grid_mins.reshape(-1, total_samps)
         sample_list = np.arange(grid_mins.shape[0])
 
         random.shuffle(sample_list)
-        # print(f"day: {self.day}, grid_days: {grid_days.shape}, sample's len: {sample_list.shape}")
 
         mini_batch = []
         count = 0
         for row_idx in sample_list:
             for col_idx in grid_mins[row_idx,:]:
                 count += 1
-                # index = row_idx*total_samps + col_idx
-                cur_sample = user_df.iloc[col_idx:col_idx + self.length, :]
+                index = col_idx * mins
+                cur_sample = user_df.iloc[index:index + self.length, :]
                 if cur_sample.shape[0] != self.length:
-                    print(f'cur_sample is wrong')
                     continue
                 mini_batch.append(cur_sample)
 
@@ -76,7 +110,7 @@ class SegmentDataset(Dataset):
         user_df = dataset.copy()
         total_samps = self.sample_s + self.sample_q
 
-        grid_days = np.arange(int(user_df.shape[0] / self.day) - int(self.length/self.day))
+        grid_days = np.arange(int(user_df.shape[0] / self.day) - int(self.length/self.day * total_samps))
         grid_days = grid_days[0:(grid_days.shape[0]//total_samps) * total_samps]
         grid_days = grid_days.reshape(-1, total_samps)
         sample_list = np.arange(grid_days.shape[0])
@@ -91,8 +125,7 @@ class SegmentDataset(Dataset):
                 index = row_idx*total_samps + col_idx*self.day
                 cur_sample = user_df.iloc[index:index + self.length, :]
                 if cur_sample.shape[0] != self.length:
-                    # print(f'cur_sample is wrong')
-                    return
+                    continue
                 mini_batch.append(cur_sample)
 
             if len(mini_batch) == total_samps:

@@ -108,7 +108,7 @@ class ConvBlock(nn.Module):
 class My_GRU(nn.Module):
     def __init__(self, input_size, hidden_size,
                  num_layers=1, batch_first=True,
-                 bidirectional=False, name=None):
+                 bidirectional=True, name=None):
         super(My_GRU, self).__init__()
         self.GRU = nn.GRU(input_size, hidden_size, num_layers,
                           batch_first, bidirectional, dtype=torch.double)
@@ -412,22 +412,23 @@ class TimeHetNet(nn.Module):
         in_ys = torch.mean(u_s, axis=2) # in_ys: (3, 20, 32)
         in_ys = torch.concat([sup_y, in_ys], axis=-1) # in_ys: (3, 20, 33)
         in_ys = self.dense_fv(in_ys) # gw, in_ys: (3, 20, 32)
+        in_ys = torch.mean(in_ys, axis=1)
         
         #### Prediction Network ####
-        p_xs = torch.tile(torch.unsqueeze(in_xs, axis=1), [1, N, 1, 1, 1]) # p_xs: (3, 20, 100, 6, 32)
-        que_x_1 = torch.unsqueeze(que_x, axis=-1) # que_x_1:(3, 20, 100, 6, 1)
+        p_xs = torch.tile(torch.unsqueeze(in_xs, axis=1), [1, que_x.shape[1], 1, 1, 1]) # p_xs: (3, 20, 100, 6, 32)
+        que_x_1 = torch.unsqueeze(que_x, axis=-1) # que_x_1:(3, 1, 100, 6, 1)
         # que_x_1 = torch.tile(torch.unsqueeze(que_x, axis=-1), [1, N, 1, 1, 1]) 
         
-        z = torch.concat([p_xs, que_x_1], axis=-1) # z: (3, 20, 100, 6, 33)
-        z = torch.transpose(z, 3, 2) # z: (3, 20, 6, 100, 33)
-        z = self.time_fz(z) # z: (3, 20, 6, 100, 32)
+        z = torch.concat([p_xs, que_x_1], axis=-1) # z: (3, 1, 100, 6, 33)
+        z = torch.transpose(z, 3, 2) # z: (3, 1, 6, 100, 33)
+        z = self.time_fz(z) # z: (3, 1, 6, 100, 32)
         
         # (Ds over channels)
-        z = torch.mean(z, axis=2) # z: (3, 20, 100, 33)
-        z = self.time_gz(z) # z: (3, 20, 100, 33)
+        z = torch.mean(z, axis=2) # z: (3, 1, 100, 33)
+        z = self.time_gz(z) # z: (3, 1, 100, 33)
         
         if self.block[-1] == 'gru':
-            out = z[:, :, -1, :] # out: (3, 20, 32)
+            out = z[:, :, -1, :] # out: (3, 1, 32)
         else:
             # reduce time array
             if self.zero_div:
@@ -436,8 +437,9 @@ class TimeHetNet(nn.Module):
                     out = 0
                 else:
                     out = torch.div(out, zero_count)
-                    
-        out = torch.concat([out, in_ys], -1) # out: (3, 20, 64)
-        out = self.dense_fz(out) # out: (3, 20, 1) # output 의 1의 값이 변경될 수 있어야 한다. T'의 y' 값
-        out = out.view(sup_y.shape[0], sup_y.shape[1], -1, 2)
+
+        in_ys = torch.tile(torch.unsqueeze(in_ys, axis=1), [1, out.shape[1], 1])
+        out = torch.concat([out, in_ys], -1) # out: (3, 1, 64)
+        out = self.dense_fz(out) # out: (3, 1, 1) # output 의 1의 값이 변경될 수 있어야 한다. T'의 y' 값
+        out = out.view(que_x.shape[0], que_x.shape[1], -1, 2)
         return out

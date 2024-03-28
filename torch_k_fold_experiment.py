@@ -1,9 +1,9 @@
 import ast
 import os
-import numpy as np
 import pandas as pd
 import datetime
 import shutil
+import wandb
 
 import torch
 from torch import nn
@@ -42,15 +42,16 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
+device = torch.device("cuda:3" if use_cuda else "cpu")
 ##################################################
 
 ##### args
 args = argument_parser()
 
-model_type = 'mlp'
 model_type = 'time-hetnet'
-# model_type = 'hetnet'
+# model_type = 'mlp'
+
+user_list_type = 'multi'
 
 loss_method = 'euclidean'
 loss_method = 'mse'
@@ -63,6 +64,8 @@ file_mode = 'min'
 # min
 round_min = 60 # 60, 120, 180
 day = int(24/int(round_min/60)) #8#24 # 6*24
+# day = 6 * 24
+day_divide = int(day//6)
 
 # sec
 round_sec = 10 # (seconds) per 10s
@@ -78,21 +81,22 @@ x_attribute = 9
 label_attribute = 2
 
 sample_s = 5
-sample_q = 5
+sample_q = 1
 
-batch_size = 500
+batch_size = 50
 
 args_early_stopping = True
-args_epoch = 100000
+args_epoch = 1500000
 args_lr = 0.001
 
 # be careful to control args_patience, it can be stucked in a local minimum point.
-args_patience = 100000
+args_patience = 1500000
 
 args_factor = 0.1
 
 train_size = 0.7
 validation_size = 0.2
+
 ##################################################
 
 ##### dirs
@@ -136,16 +140,35 @@ train_list      = user_list[0:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):]
 
-num_fold = 2
+num_fold = 7
 k_fold_list = user_list[0:num_fold]
 
 writer = SummaryWriter(writer_dir)
+
+config = {
+    'model_type':model_type,
+    'user_list_type':user_list_type,
+    'epochs':args_epoch,
+    'learning_rate':args_lr,
+    'batch_size':batch_size,
+    'sample_size':sample_s,
+    'day':day,
+    'day_divide':day_divide,
+    'y_timestep':y_timestep,
+    'length':length,
+    'k_fold_list':k_fold_list,
+    'writer_dir':writer_dir
+}
 print("##################################################################")
 print(f"use_cuda: {use_cuda}, device: {device}")
 print(f"model_type: {model_type}")
 print("Building Network ...")
 
+# ------- Init Wandb -------
+wandb.init(project='geolife_timehetnet', config=config)
+
 best_dist = float("inf")
+# for fold_idx in reversed(range(num_fold)):
 for fold_idx in range(num_fold):
     train_list = []
     test_list = []
@@ -155,6 +178,7 @@ for fold_idx in range(num_fold):
         else:
             test_list += [user_id]
     print(f"*****************************************")
+    # fold_idx = num_fold - fold_idx
     print(f'{fold_idx}_fold start')
     print(f'train_list: {train_list}')
     print(f'test_list: {test_list}')
@@ -168,6 +192,7 @@ for fold_idx in range(num_fold):
                                 'args_dims':[ast.literal_eval(args.dims)],
                                 'round_min': [round_min],
                                 'day': [day],
+                                'day_divide': [day_divide],
                                 'length': [length],
                                 'y_timestep': [y_timestep],
                                 'loss_method':[loss_method],
@@ -188,20 +213,31 @@ for fold_idx in range(num_fold):
 
     # Dataset
     if model_type == 'mlp':
-        training_data           = MlpDataset('train', data_dir, train_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
-        validation_data         = MlpDataset('valid', data_dir, validation_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
-        test_data               = MlpDataset('test', data_dir, test_list, y_timestep, day, round_min, round_sec, time_delta, label_attribute, length, device, file_mode)
+        training_data           = MlpDataset('train', data_dir, train_list, y_timestep, day, day_divide, round_min, round_sec, label_attribute, length, device)
+        validation_data         = MlpDataset('valid', data_dir, validation_list, y_timestep, day, day_divide, round_min, round_sec, label_attribute, length, device)
+        test_data               = MlpDataset('test', data_dir, test_list, y_timestep, day, day_divide, round_min, round_sec, label_attribute, length, device)
         train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
         validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
         test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
     else:
-        training_data           = SegmentDataset(model_type, data_dir, train_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
-        validation_data         = SegmentDataset(model_type, data_dir, validation_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
-        test_data               = SegmentDataset(model_type, data_dir, test_list, device, day, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
+        # training_data           = SegmentDataset("train", user_list_type, model_type, data_dir, train_list, device, day, day_divide, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
+        # validation_data         = SegmentDataset("test", user_list_type, model_type, data_dir, validation_list, device, day, day_divide, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
+        # test_data               = SegmentDataset("test", user_list_type, model_type, data_dir, test_list, device, day, day_divide, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
+        training_data = SegmentDataset('train', user_list_type, data_dir, train_list, device, day, day_divide,
+                                       round_min, round_sec, y_timestep, length, label_attribute, sample_s,
+                                       sample_q)
+        validation_data = SegmentDataset('test', user_list_type, data_dir, validation_list, device, day, day_divide,
+                                         round_min, round_sec, y_timestep, length, label_attribute,
+                                         sample_s, sample_q)
+        test_data = SegmentDataset('test', user_list_type, data_dir, test_list, device, day, day_divide, round_min,
+                                   round_sec, y_timestep, length, label_attribute, sample_s, sample_q,)
+
         train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
         validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
         test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
 
+    print(f"train_len: {len(train_dataloader.dataset)}")
+    print(f"test_len: {len(test_dataloader.dataset)}")
     # print('Start Train')
     #--------Define Tensorboard--------
     # writer_dir = make_Tensorboard_dir(writer_dir_name, dir_format)
@@ -250,6 +286,8 @@ for fold_idx in range(num_fold):
         criterion = metricMenhattan
     else:
         criterion = nn.MSELoss()
+
+    test_criterion = metricEuclidean
     optimizer = optim.Adam(model.parameters(), lr=args_lr)
 
     #--------Define Callbacks----------------
@@ -291,7 +329,8 @@ for fold_idx in range(num_fold):
             optimizer.step()
 
         if epoch % 100 == 1:
-            writer.add_scalar(title_train_loss, loss_train, epoch)
+            # writer.add_scalar(title_train_loss, loss_train, epoch)
+            wandb.log({title_train_loss: loss_train}, step=epoch)
 
         model.eval()
         if epoch == 0:
@@ -306,17 +345,18 @@ for fold_idx in range(num_fold):
 
                 if model_type == 'mlp':
                     output = torch.concat([torch.unsqueeze(test_y[:, :, 0], -1), output], axis=-1)
-                    loss = criterion(test_y[test_y[:, :, 0] == 1], output[output[:, :, 0] == 1])
+                    loss = test_criterion(test_y[test_y[:, :, 0] == 1], output[output[:, :, 0] == 1])
                 else:
                     mask, y_true = test_y
                     output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
                     y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
-                    loss = criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])
+                    loss = test_criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])
 
                 loss_test += loss.item()
 
             if epoch % 100 == 1:
-                writer.add_scalar(title_test_loss, loss_test, epoch)
+                # writer.add_scalar(title_test_loss, loss_test, epoch)
+                wandb.log({title_test_loss: loss_test}, step=epoch)
             print(f"train loss: {loss_train}, test loss: {loss_test}")
             lr_scheduler.step(loss_test)
 
@@ -352,7 +392,8 @@ for fold_idx in range(num_fold):
 
             mean_dist += dist.item()
     title_euclidean = str(fold_idx) + '_Euclidean Dist'
-    writer.add_scalar(title_euclidean, mean_dist, fold_idx)
+    # writer.add_scalar(title_euclidean, mean_dist, fold_idx)
+    wandb.log({title_euclidean: mean_dist}, step=fold_idx)
 
     print(f"fold-{fold_idx}")
     print(f"Euclidean distance: {mean_dist}")
