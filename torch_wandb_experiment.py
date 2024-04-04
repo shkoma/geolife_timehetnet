@@ -1,6 +1,5 @@
 import ast
 import os
-import numpy as np
 import pandas as pd
 import datetime
 import wandb
@@ -12,7 +11,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from torch_args import ArgumentSet
+from torch_args import ArgumentSet, ArgumentMask, HetnetMask
 from torch_mlp import MLP
 from torch_mlp_dataset import MlpDataset
 from torch_segment_dataset import SegmentDataset
@@ -44,47 +43,43 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:1" if use_cuda else "cpu")
+device = torch.device("cuda:3" if use_cuda else "cpu")
 ##################################################
 
 ##### args
 args = argument_parser()
 
 model_type = 'mlp'
-model_type = 'time-hetnet'
+# model_type = 'time-hetnet'
 # model_type = 'hetnet'
+is_mask = True
 
 user_list_type = 'single'
 
 loss_method = 'euclidean'
 loss_method = 'mse'
 
-hidden_layer = 5
-cell = 256
-
 file_mode = 'min'
+if model_type == "mlp":
+    x_attribute = 9
+    length = ArgumentMask.total_day * ArgumentMask.time_stamp
+    y_timestep = ArgumentMask.output_day * ArgumentMask.time_stamp
+    hidden_layer = 5
+    cell = 256
 
-# min
-round_min = 60 # 60, 120, 180
-day = int(24/int(round_min/60)) #8#24 # 6*24
-day_divide = day
+else: #time-hetnet
+    if is_mask == True:
+        sample_s = HetnetMask.sample_s
+        sample_q = HetnetMask.sample_q
+        length = HetnetMask.length
+        y_timestep = HetnetMask.y_timestep
+    else:
+        sample_s = ArgumentSet.sample_s
+        sample_q = ArgumentSet.sample_q
+        length = ArgumentSet.length
+        y_timestep = ArgumentSet.y_timestep
 
-# sec
-round_sec = ArgumentSet.round_sec # (seconds) per 10s
-min_length = ArgumentSet.min
-time_delta = 20 # (minutes) 1 segment length
-# length = min_length * time_delta
-
-how_many = 3
-length = ArgumentSet.length#day * how_many
-y_timestep = ArgumentSet.y_timestep
-
-x_attribute = 9
 label_attribute = 2
-
-sample_s = ArgumentSet.sample_s
-sample_q = ArgumentSet.sample_q
-
 batch_size = ArgumentSet.batch_size
 
 args_early_stopping = True
@@ -112,6 +107,7 @@ dir_format = '[' + model_type + '_' + user_list_type + ']_%Y%m%d-%H%M%S'
 configuration_file = 'configuration.csv'
 
 writer_dir = make_Tensorboard_dir(writer_dir_name, dir_format)
+writer = SummaryWriter(writer_dir)
 ##################################################
 
 ##### Train Phase
@@ -121,10 +117,12 @@ best_train_model = 'best_train_model.pth'
 ##################################################
 
 ##### Time grid User list
-time_grid_csv = 'data/geolife/time_grid_sample.csv'
+# time_grid_csv = 'data/geolife/time_grid_sample.csv'
+if is_mask == True:
+    time_grid_csv = 'mask_user_list.csv'
+else:
+    time_grid_csv = 'walk_speed_sample_user_list.csv'
 user_df = pd.read_csv(time_grid_csv)
-ratio_var = 'ratio_' + str(round_min) + 'min'
-user_df = user_df.loc[user_df[ratio_var] > 10, :]
 locationPreprocessor = LocationPreprocessor('data/geolife/')
 user_list = []
 for user in user_df['user_id'].to_list():
@@ -144,65 +142,66 @@ train_list = user_list[2:3]
 validation_list = user_list[2:3]
 test_list       = user_list[2:3]
 
-train_list = ['035']
-validation_list = ['035']
-test_list = ['035']
+num = 2
+train_list = user_list#[:-num]
+validation_list = user_list#[:-num]
+test_list = user_list#[:-num]
+
+# train_list = ['035']
+# validation_list = ['035']
+# test_list = ['035']
 ##################################################
-
-config = {
-    'model_type':model_type,
-    'user_list_type':user_list_type,
-    'epochs':args_epoch,
-    'learning_rate':args_lr,
-    'batch_size':batch_size,
-    'support_set':sample_s,
-    'day':day,
-    'day_divide':day_divide,
-    'y_timestep':y_timestep,
-    'length':length,
-    'writer_dir':writer_dir,
-    'train_list':train_list,
-    'test_list':test_list
-}
-
 def write_configruation(conf_file):
     #--------Write Configration--------
     import pandas as pd
-    conf_df = pd.DataFrame({'device':[device],
-                            'user_list_type':[user_list_type],
-                            'model_type':[model_type],
-                            'args_dims':[ast.literal_eval(args.dims)],
-                            'round_min': [round_min],
-                            'round_sec': [round_sec],
-                            'day': [day],
-                            'day_divide': [day_divide],
-                            'length': [length],
-                            'y_timestep': [y_timestep],
-                            'loss_method':[loss_method],
-                            'batch_size':[batch_size],
-                            'hidden_layer':[hidden_layer],
-                            'cell':[cell],
-                            'label_attribute':[label_attribute],
-                            'sample_s':[sample_s],
-                            'sample_q':[sample_q],
-                            'epoch':[args_epoch],
-                            'patience':[args_patience],
-                            'x_attribute':[x_attribute],
-                            'file_mode':[file_mode],
-                            'time_delta':[time_delta],
-                            'train_list':[train_list],
-                            'val_list':[validation_list],
-                            'test_list':[test_list],
-                            'train_columns':[training_data.get_train_columns()]})
+    if model_type == 'mlp':
+        conf_df = pd.DataFrame({'device': [device],
+                                'user_list_type': [user_list_type],
+                                'model_type': [model_type],
+                                'random': [ArgumentSet.random],
+                                'length': [length],
+                                'y_timestep': [y_timestep],
+                                'loss_method': [loss_method],
+                                'batch_size': [batch_size],
+                                'hidden_layer': [hidden_layer],
+                                'cell': [cell],
+                                'label_attribute': [label_attribute],
+                                'epoch': [args_epoch],
+                                'patience': [args_patience],
+                                'x_attribute': [x_attribute],
+                                'file_mode': [file_mode],
+                                'train_list': [train_list],
+                                'test_list': [test_list],
+                                'write_dir': [writer_dir],
+                                'train_columns': [training_data.get_train_columns()]})
+    else:
+        conf_df = pd.DataFrame({'device': [device],
+                                'user_list_type': [user_list_type],
+                                'model_type': [model_type],
+                                'is_mask':[is_mask],
+                                'random':[ArgumentSet.random],
+                                'args_dims': [ast.literal_eval(args.dims)],
+                                'length': [length],
+                                'y_timestep': [y_timestep],
+                                'loss_method': [loss_method],
+                                'batch_size': [batch_size],
+                                'label_attribute': [label_attribute],
+                                'sample_s': [sample_s],
+                                'sample_q': [sample_q],
+                                'epoch': [args_epoch],
+                                'patience': [args_patience],
+                                'file_mode': [file_mode],
+                                'train_list': [train_list],
+                                'val_list': [validation_list],
+                                'test_list': [test_list],
+                                'write_dir': [writer_dir],
+                                'train_columns': [training_data.get_train_columns()]})
+
     conf_df.to_csv(conf_file, index=False)
 
 print("##################################################################")
 print(f"use_cuda: {use_cuda}, device: {device}")
 print(f"model_type: {model_type}")
-
-# print(f"train len: {train_len}")
-# print(f"validation len: {validation_len}")
-# print(f"test len: {len(test_list)}")
 
 print(f"train: [{train_list}]")
 print(f"validation: [{validation_list}]")
@@ -212,11 +211,19 @@ print("Building Network ...")
 
 # Dataset
 if model_type == 'mlp':
-    training_data           = MlpDataset('train', data_dir, train_list, y_timestep, day, day_divide, round_min, round_sec, label_attribute, length, device)
-    validation_data         = MlpDataset('test', data_dir, validation_list, y_timestep, day, day_divide, round_min, round_sec, label_attribute, length, device)
-    test_data               = MlpDataset('test', data_dir, test_list, y_timestep, day, day_divide, round_min, round_sec, label_attribute, length, device)
+    training_data           = MlpDataset(data_mode='train',
+                                         data_dir=data_dir,
+                                         writer_dir=writer_dir,
+                                         user_list=train_list,
+                                         label_attribute=label_attribute,
+                                         device=device)
+    test_data               = MlpDataset(data_mode='test',
+                                         data_dir=data_dir,
+                                         writer_dir=writer_dir,
+                                         user_list=test_list,
+                                         label_attribute=label_attribute,
+                                         device=device)
     train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
-    validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
     test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
 else:
     # training_data           = SegmentDataset('train', user_list_type, data_dir, train_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
@@ -226,42 +233,75 @@ else:
 
     training_data = TrajectoryDataset(data_mode='train',
                                         user_list_type=user_list_type, 
-                                        data_dir=data_dir, 
+                                        data_dir=data_dir,
+                                        writer_dir=writer_dir,
                                         user_list=train_list, 
-                                        device=device, 
-                                        round_sec=round_sec, 
+                                        device=device,
                                         y_timestep=y_timestep, 
                                         length=length, 
                                         label_attribute=label_attribute, 
                                         sample_s=sample_s, 
-                                        sample_q=sample_q)
-    validation_data = TrajectoryDataset(data_mode='test',
-                                        user_list_type=user_list_type, 
-                                        data_dir=data_dir, 
-                                        user_list=test_list,
-                                        device=device, 
-                                        round_sec=round_sec, 
-                                        y_timestep=y_timestep, 
-                                        length=length, 
-                                        label_attribute=label_attribute, 
-                                        sample_s=sample_s, 
-                                        sample_q=sample_q)
+                                        sample_q=sample_q,
+                                        is_mask=is_mask)
     test_data = TrajectoryDataset(data_mode='test',
                                         user_list_type=user_list_type, 
-                                        data_dir=data_dir, 
+                                        data_dir=data_dir,
+                                        writer_dir=writer_dir,
                                         user_list=test_list, 
-                                        device=device, 
-                                        round_sec=round_sec, 
+                                        device=device,
                                         y_timestep=y_timestep, 
                                         length=length, 
                                         label_attribute=label_attribute, 
                                         sample_s=sample_s, 
-                                        sample_q=sample_q)
+                                        sample_q=sample_q,
+                                        is_mask=is_mask)
     train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
-    validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
     test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
 
 if is_train == True:
+    if model_type == 'mlp':
+        config = {
+            'device': device,
+            'model_type': model_type,
+            'hidden_layer': hidden_layer,
+            'cell': cell,
+            'user_list_type': user_list_type,
+            'epochs': args_epoch,
+            'learning_rate': args_lr,
+            'batch_size': batch_size,
+            'input': ArgumentMask.input_day,
+            'output': ArgumentMask.output_day,
+            'time_stamp': ArgumentMask.time_stamp,
+            'round_min': ArgumentMask.round_min,
+            'start_time': ArgumentMask.start_time,
+            'finish_time': ArgumentMask.finish_time,
+            'train_list': train_list,
+            'test_list': test_list,
+            'train_len': len(train_dataloader.dataset),
+            'test_len': len(test_dataloader.dataset),
+            'write_dir': writer_dir,
+            'random': ArgumentMask.random
+        }
+    else:
+        config = {
+            'device': device,
+            'model_type': model_type,
+            'is_mask': is_mask,
+            'user_list_type': user_list_type,
+            'epochs': args_epoch,
+            'learning_rate': args_lr,
+            'batch_size': batch_size,
+            'length':length,
+            'y_timestep':y_timestep,
+            'support_set': sample_s,
+            'train_list': train_list,
+            'test_list': test_list,
+            'train_len':len(train_dataloader.dataset),
+            'test_len': len(test_dataloader.dataset),
+            'write_dir': writer_dir,
+            'random': ArgumentSet.random
+        }
+
     print(f"train_len: {len(train_dataloader.dataset)}")
     print(f"test_len: {len(test_dataloader.dataset)}")
     print('Start Train')
@@ -271,15 +311,21 @@ if is_train == True:
 
     #--------Define Tensorboard--------
     # writer_dir = make_Tensorboard_dir(writer_dir_name, dir_format)
-    writer = SummaryWriter(writer_dir)
+    # writer = SummaryWriter(writer_dir)
 
     best_model_path = writer_dir + "/" + best_model_path
     best_train_model = writer_dir + "/" + best_train_model
 
     #--------Define a Model
     if model_type == 'mlp':
-        model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, loss_fn=loss_method, label_attribute=label_attribute, cell=cell, hidden_layer=hidden_layer)
-        test_model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, loss_fn=loss_method, label_attribute=label_attribute, cell=cell, hidden_layer=hidden_layer)
+        model = MLP(input_shape=[ArgumentMask.total_day * ArgumentMask.time_stamp, training_data.get_x_attibutes()],
+                    loss_fn=loss_method,
+                    label_attribute=label_attribute,
+                    cell=cell, hidden_layer=hidden_layer)
+        test_model = MLP(input_shape=[ArgumentMask.total_day * ArgumentMask.time_stamp, test_data.get_x_attibutes()],
+                         loss_fn=loss_method,
+                         label_attribute=label_attribute,
+                         cell=cell, hidden_layer=hidden_layer)
 
     elif model_type == 'hetnet':
         model = HetNet(dims = ast.literal_eval(args.dims),
@@ -307,9 +353,6 @@ if is_train == True:
                            block = args.block.split(","),
                            output_shape=[y_timestep, label_attribute],
                            length = length)
-
-    else:
-        model = MLP(input_shape=[length, x_attribute], y_timestep = y_timestep, loss_fn=loss_method, label_attribute=label_attribute, cell=cell, hidden_layer=hidden_layer)
 
     #--------Define Losses annd metrics----------------
     if loss_method == 'euclidean':
@@ -360,7 +403,6 @@ if is_train == True:
             optimizer.step()
 
         if epoch % 100 == 1:
-            # writer.add_scalar('training loss', loss_train, epoch)
             wandb.log({'training loss':loss_train}, step=epoch)
 
         model.eval()
@@ -369,7 +411,7 @@ if is_train == True:
 
         loss_val = 0.0
         with torch.no_grad():
-            for val_idx, val_data in enumerate(validation_dataloader, 0):
+            for val_idx, val_data in enumerate(test_dataloader, 0):
                 X_val, y_val = val_data
                 output = model(X_val)
 
@@ -385,7 +427,6 @@ if is_train == True:
                 loss_val += val_loss.item()
 
             if epoch % 100 == 1:
-                # writer.add_scalar('validation loss', loss_val, epoch)
                 wandb.log({'validation loss':loss_val}, step=epoch)
             print(f"train loss: {loss_train}, validation loss: {loss_val}")
             lr_scheduler.step(loss_val)
@@ -426,6 +467,5 @@ if is_train == True:
 
                     loss_test += dist
                     wandb.log({'Euclidean distance': loss_test}, step=epoch)
-                    # writer.add_scalar('Euclidean distance', loss_test, epoch)
                     print(f"test loss: {loss_test}")
 print('Finish Train')

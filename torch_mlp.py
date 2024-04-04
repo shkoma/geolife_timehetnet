@@ -1,14 +1,14 @@
 import torch
 import torch.nn as nn
+from torch_args import ArgumentMask
 
 # MLP 모델
 class MLP(nn.Module):
-    def __init__(self, input_shape, y_timestep, label_attribute, loss_fn, cell=256, hidden_layer=2):
+    def __init__(self, input_shape, label_attribute, loss_fn, cell=256, hidden_layer=2):
         super(MLP, self).__init__()
         self.input_shape = input_shape[-2] * input_shape[-1]
-        self.y_timestep = y_timestep
         self.label_attribute = label_attribute
-        self.output_shape = y_timestep * label_attribute
+        self.output_shape = ArgumentMask.output_day * ArgumentMask.time_stamp * label_attribute
         self.loss_fn = loss_fn
         self.cell = cell
         self.hidden_layer = hidden_layer
@@ -18,16 +18,10 @@ class MLP(nn.Module):
         final_list = []
         final_list.append(nn.Linear(self.input_shape, self.cell, dtype=torch.double))
         final_list.append(nn.LeakyReLU(negative_slope=0.1))
-        # final_list.append(nn.ReLU(inplace=True))
-        # final_list.append(nn.BatchNorm1d(self.cell))
-        # final_list.append(nn.Dropout(0.1))
 
         for _ in range(self.hidden_layer):
             final_list.append(nn.Linear(self.cell, self.cell, dtype=torch.double))
             final_list.append(nn.LeakyReLU(negative_slope=0.1))
-            # final_list.append(nn.ReLU(inplace=True))
-            # final_list.append(nn.BatchNorm1d(self.cell))
-            # final_list.append(nn.Dropout(0.1))
 
         final_list.append(nn.Linear(self.cell, self.output_shape, dtype=torch.double))
         return nn.Sequential(*final_list)
@@ -42,6 +36,6 @@ class MLP(nn.Module):
 
         x  = self.fc_list(x)
         
-        out_shape_new = [batch] + [self.y_timestep] + [self.label_attribute]
+        out_shape_new = [batch] + [ArgumentMask.output_day * ArgumentMask.time_stamp] + [self.label_attribute]
         out = torch.reshape(x, out_shape_new)
         return out

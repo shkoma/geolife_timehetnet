@@ -42,7 +42,7 @@ class LocationPreprocessor():
         user_id_list = []
         for id in range(182):
             user_id = self.getUserId(id)
-            csv_file = './Data/' + user_id + '/csv/' + user_id + '.csv'
+            csv_file = self.data_path + '/Data/' + user_id + '/csv/' + user_id + '.csv'
             df = pd.read_csv(csv_file)
             if df.shape[0] < 500:
                 continue
@@ -105,7 +105,7 @@ class LocationPreprocessor():
             
         for id in valid_user_list['valid_user_list']:
             user_id = self.getUserId(id)
-            csv_file = './Data/' + user_id + '/csv/' + user_id + '.csv'
+            csv_file = self.data_path  + '/Data/' + user_id + '/csv/' + user_id + '.csv'
             user0 = pd.read_csv(csv_file)
             
             if user0['latitude'].min() < min_lat:

@@ -15,7 +15,6 @@ from torch.utils.tensorboard import SummaryWriter
 from torch_args import ArgumentSet
 from torch_mlp import MLP
 from torch_mlp_dataset import MlpDataset
-from torch_segment_dataset import SegmentDataset
 from torch_trajectory_dataset import TrajectoryDataset
 from data.geolife.convert_minmax_location import LocationPreprocessor
 
@@ -44,7 +43,7 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:3" if use_cuda else "cpu")
+device = torch.device("cuda:0" if use_cuda else "cpu")
 ##################################################
 
 ##### args
@@ -53,7 +52,7 @@ args = argument_parser()
 model_type = 'time-hetnet'
 # model_type = 'mlp'
 
-user_list_type = 'multi'
+user_list_type = 'single'
 
 loss_method = 'euclidean'
 loss_method = 'mse'
@@ -87,11 +86,11 @@ sample_q = ArgumentSet.sample_q
 batch_size = ArgumentSet.batch_size
 
 args_early_stopping = True
-args_epoch = 1500000
+args_epoch = 100000
 args_lr = 0.001
 
 # be careful to control args_patience, it can be stucked in a local minimum point.
-args_patience = 1500000
+args_patience = 25000
 
 args_factor = 0.1
 
@@ -108,7 +107,7 @@ data_dir = "data/geolife/Data/"
 # tensorboard start
 # ./tensorboard --logdir=data/geolife/runs
 writer_dir_name = 'data/geolife/runs'
-dir_format = '[segment_fold_' + model_type + ']_%Y%m%d-%H%M%S'
+dir_format = '[every_single_user_' + model_type + ']_%Y%m%d-%H%M%S'
 configuration_file = 'configuration.csv'
 
 writer_dir = make_Tensorboard_dir(writer_dir_name, dir_format)
@@ -134,18 +133,6 @@ print(f"user_list: {user_list}")
 ##################################################
 
 ##### Time grid User list
-# time_grid_csv = 'data/geolife/time_grid_sample.csv'
-# user_df = pd.read_csv(time_grid_csv)
-# ratio_var = 'ratio_' + str(round_min) + 'min'
-# user_df = user_df.loc[user_df[ratio_var] > 10, :]
-# locationPreprocessor = LocationPreprocessor('data/geolife/')
-# user_list = []
-# for user in user_df['user_id'].to_list():
-#     user_list += [locationPreprocessor.getUserId(user)]
-# print(f"user_list: {user_list}")
-##################################################
-
-##### Train - Validation user list
 train_len       = (int)(len(user_list) * train_size)
 validation_len  = (int)(len(user_list) * validation_size)
 
@@ -153,52 +140,35 @@ train_list      = user_list[0:train_len]
 validation_list = user_list[train_len:(train_len + validation_len)]
 test_list       = user_list[(train_len + validation_len):]
 
-num_fold = len(user_list)-1
-k_fold_list = user_list[0:num_fold]
+num_fold = 10
+# user_list = user_list[0:num_fold]
+# user_list = user_list[0:2]
+# user_list = user_list[2:4]
+# user_list = user_list[4:7]
+user_list = user_list[7:10]
 
 writer = SummaryWriter(writer_dir)
 
-config = {
-    'model_type':model_type,
-    'user_list_type':user_list_type,
-    'epochs':args_epoch,
-    'learning_rate':args_lr,
-    'batch_size':batch_size,
-    'minimum_dist': ArgumentSet.minimum_dist,
-    'max_speed': ArgumentSet.max_speed,
-    'support_set':sample_s,
-    'day':day,
-    'day_divide':day_divide,
-    'y_timestep':y_timestep,
-    'length':length,
-    'k_fold_list':k_fold_list,
-    'writer_dir':writer_dir
-}
 print("##################################################################")
 print(f"use_cuda: {use_cuda}, device: {device}")
 print(f"model_type: {model_type}")
 print("Building Network ...")
 
 # ------- Init Wandb -------
-wandb.init(project='geolife_timehetnet', config=config)
+# wandb.init(project='geolife_timehetnet', config=config)
 
 best_dist = float("inf")
-for fold_idx in reversed(range(num_fold)):
-# for fold_idx in range(num_fold):
+for user_idx in range(num_fold):
     train_list = []
     test_list = []
-    for user_id in user_list[:num_fold]:
-        if user_list[fold_idx] != user_id:
-            train_list += [user_id]
-        else:
-            test_list += [user_id]
+    user_id = user_list[user_idx]
+    train_list += [user_id]
+    test_list += [user_id]
     print(f"*****************************************")
-    fold_idx = num_fold - fold_idx
-    print(f'{fold_idx}_fold start')
+    print(f'{user_id} user start')
     print(f'train_list: {train_list}')
     print(f'test_list: {test_list}')
 ##################################################
-
     def write_configruation(conf_file):
         #--------Write Configration--------
         import pandas as pd
@@ -236,66 +206,62 @@ for fold_idx in reversed(range(num_fold)):
         validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
         test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
     else:
-        # training_data           = SegmentDataset("train", user_list_type, model_type, data_dir, train_list, device, day, day_divide, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
-        # validation_data         = SegmentDataset("test", user_list_type, model_type, data_dir, validation_list, device, day, day_divide, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
-        # test_data               = SegmentDataset("test", user_list_type, model_type, data_dir, test_list, device, day, day_divide, round_min, round_sec, time_delta, y_timestep, length, label_attribute, sample_s, sample_q, file_mode)
-        # training_data = SegmentDataset('train', user_list_type, data_dir, train_list, device, day, day_divide,
-        #                                round_min, round_sec, y_timestep, length, label_attribute, sample_s,
-        #                                sample_q)
-        # validation_data = SegmentDataset('test', user_list_type, data_dir, validation_list, device, day, day_divide,
-        #                                  round_min, round_sec, y_timestep, length, label_attribute,
-        #                                  sample_s, sample_q)
-        # test_data = SegmentDataset('test', user_list_type, data_dir, test_list, device, day, day_divide, round_min,
-        #                            round_sec, y_timestep, length, label_attribute, sample_s, sample_q,)
-
         training_data = TrajectoryDataset(data_mode='train',
-                                          user_list_type=user_list_type, 
+                                          user_list_type=user_list_type,
                                           data_dir=data_dir,
                                           writer_dir=writer_dir,
-                                          user_list=train_list, 
-                                          device=device, 
-                                          round_sec=round_sec, 
-                                          y_timestep=y_timestep, 
-                                          length=length, 
-                                          label_attribute=label_attribute, 
-                                          sample_s=sample_s, 
-                                          sample_q=sample_q)
-        validation_data = TrajectoryDataset(data_mode='test',
-                                          user_list_type=user_list_type, 
-                                          data_dir=data_dir,
-                                          writer_dir=writer_dir,
-                                          user_list=validation_list, 
-                                          device=device, 
-                                          round_sec=round_sec, 
-                                          y_timestep=y_timestep, 
-                                          length=length, 
-                                          label_attribute=label_attribute, 
-                                          sample_s=sample_s, 
+                                          user_list=train_list,
+                                          device=device,
+                                          round_sec=round_sec,
+                                          y_timestep=y_timestep,
+                                          length=length,
+                                          label_attribute=label_attribute,
+                                          sample_s=sample_s,
                                           sample_q=sample_q)
         test_data = TrajectoryDataset(data_mode='test',
-                                          user_list_type=user_list_type, 
+                                          user_list_type=user_list_type,
                                           data_dir=data_dir,
                                           writer_dir=writer_dir,
-                                          user_list=test_list, 
-                                          device=device, 
-                                          round_sec=round_sec, 
-                                          y_timestep=y_timestep, 
-                                          length=length, 
-                                          label_attribute=label_attribute, 
-                                          sample_s=sample_s, 
+                                          user_list=test_list,
+                                          device=device,
+                                          round_sec=round_sec,
+                                          y_timestep=y_timestep,
+                                          length=length,
+                                          label_attribute=label_attribute,
+                                          sample_s=sample_s,
                                           sample_q=sample_q)
 
         train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
-        validation_dataloader   = DataLoader(validation_data, batch_size, shuffle=False)
         test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
 
     print(f"train_len: {len(train_dataloader.dataset)}")
     print(f"test_len: {len(test_dataloader.dataset)}")
-    # print('Start Train')
+    # ------- Init Wandb -------
+    config = {
+        'model_type': model_type,
+        'user_list_type': user_list_type,
+        'epochs': args_epoch,
+        'learning_rate': args_lr,
+        'batch_size': batch_size,
+        'minimum_dist': ArgumentSet.minimum_dist,
+        'max_speed': ArgumentSet.max_speed,
+        'support_set': sample_s,
+        'day': day,
+        'day_divide': day_divide,
+        'y_timestep': y_timestep,
+        'length': length,
+        'signle_user_list': user_list,
+        'writer_dir': writer_dir,
+        'train_len': len(train_dataloader.dataset),
+        'test_len': len(test_dataloader.dataset),
+    }
+
+    print('wandb init')
+    wandb.init(project='geolife_timehetnet', config=config)
     #--------Define Tensorboard--------
     # writer_dir = make_Tensorboard_dir(writer_dir_name, dir_format)
     # writer = SummaryWriter(writer_dir)
-    best_model_path = writer_dir + "/" + str(fold_idx) + '_fold_best_model.pth'
+    best_model_path = writer_dir + "/" + str(user_id) + '_user_best_model.pth'
 
     #--------Define a Model
     if model_type == 'mlp':
@@ -350,13 +316,13 @@ for fold_idx in reversed(range(num_fold)):
 
     #------- Train the model -----------------
     best_val_loss = float("inf")
-    best_train_loss = float("inf")
+    no_improvement = 0
 
     model = model.to(torch.double)
     model = model.to(device)
 
-    title_train_loss = str(fold_idx) + '_fold training loss'
-    title_test_loss = str(fold_idx) + '_fold test loss'
+    title_train_loss = 'every_user_training_loss'#str(user_id) + '_user training loss'
+    title_test_loss = 'every_user_test_loss'#str(user_id) + '_user test loss'
     for epoch in range(args_epoch):
         print(f"epoch: {epoch}")
 
@@ -382,12 +348,11 @@ for fold_idx in reversed(range(num_fold)):
             optimizer.step()
 
         if epoch % 100 == 1:
-            # writer.add_scalar(title_train_loss, loss_train, epoch)
             wandb.log({title_train_loss: loss_train}, step=epoch)
 
         model.eval()
         if epoch == 0:
-            configuration_file = str(fold_idx)+ '_fold_configuration.csv'
+            configuration_file = str(user_id)+ '_configuration.csv'
             write_configruation(writer_dir + "/" + configuration_file)
 
         loss_test = 0.0
@@ -408,21 +373,23 @@ for fold_idx in reversed(range(num_fold)):
                 loss_test += loss.item()
 
             if epoch % 100 == 1:
-                # writer.add_scalar(title_test_loss, loss_test, epoch)
                 wandb.log({title_test_loss: loss_test}, step=epoch)
             print(f"train loss: {loss_train}, test loss: {loss_test}")
             lr_scheduler.step(loss_test)
 
         if loss_test < best_val_loss:
             best_val_loss = loss_test
+            no_improvement = 0
             print('save best weight and bias')
             torch.save(model.state_dict(), best_model_path)
+        else:
+            no_improvement += 1
 
-        if loss_train < best_train_loss:
-            best_train_loss = loss_train
-            print('save best train model')
+        if no_improvement > args_patience:
+            print(f'user_{user_id} stop training early')
+            break
 
-    # Test mode
+    # Each User Test mode
     test_model.load_state_dict(torch.load(best_model_path))
     test_model = test_model.to(device)
     criterion = metricEuclidean
@@ -442,19 +409,10 @@ for fold_idx in reversed(range(num_fold)):
                 output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
                 y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
                 dist = criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])
-
             mean_dist += dist.item()
-    title_euclidean = str(fold_idx) + '_Euclidean Dist'
-    # writer.add_scalar(title_euclidean, mean_dist, fold_idx)
-    wandb.log({title_euclidean: mean_dist}, step=fold_idx)
 
-    print(f"fold-{fold_idx}")
-    print(f"Euclidean distance: {mean_dist}")
-
-    total_best_model_path = writer_dir + "/" + 'total_best_model.pth'
-    if mean_dist >= 0.001 and best_dist > mean_dist:
-        best_dist = mean_dist
-        shutil.copyfile(best_model_path, total_best_model_path)
-        print('save total best model')
-
+    title_euclidean = 'Euclidean Dist (Every user)'
+    # wandb.log({title_euclidean: mean_dist}, step=int(user_id))
+    wandb.log({title_euclidean: mean_dist})
+    wandb.finish()
 print('Finish Train')
