@@ -3,6 +3,22 @@ import torch.nn as nn
 from torch_args import ArgumentMask
 
 # MLP 모델
+
+class My_Linear(nn.Module):
+    def __init__(self, in_features, out_features, bias=True, device=None, name=None, dtype=None):
+        super(My_Linear, self).__init__()
+        self.Linear = nn.Linear(in_features=in_features, out_features=out_features, bias=bias, device=device, dtype=dtype)
+        self.name = name
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.Linear.reset_parameters()
+        self.Linear.bias.data.fill_(0)
+
+    def forward(self, x):
+        x = self.Linear(x)
+        return x
+
 class MLP(nn.Module):
     def __init__(self, input_shape, label_attribute, loss_fn, cell=256, hidden_layer=2):
         super(MLP, self).__init__()
@@ -16,14 +32,14 @@ class MLP(nn.Module):
     
     def getSequential(self):
         final_list = []
-        final_list.append(nn.Linear(self.input_shape, self.cell, dtype=torch.double))
+        final_list.append(My_Linear(self.input_shape, self.cell, dtype=torch.double))
         final_list.append(nn.LeakyReLU(negative_slope=0.1))
 
         for _ in range(self.hidden_layer):
-            final_list.append(nn.Linear(self.cell, self.cell, dtype=torch.double))
+            final_list.append(My_Linear(self.cell, self.cell, dtype=torch.double))
             final_list.append(nn.LeakyReLU(negative_slope=0.1))
 
-        final_list.append(nn.Linear(self.cell, self.output_shape, dtype=torch.double))
+        final_list.append(My_Linear(self.cell, self.output_shape, dtype=torch.double))
         return nn.Sequential(*final_list)
 
     def forward(self, x):

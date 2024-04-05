@@ -13,9 +13,15 @@ global_first_feature =  ast.literal_eval("[32, 32, 32]")[0]
 class My_Linear(nn.Module):
     def __init__(self, in_features, out_features, bias=True, device=None, name=None):
         super(My_Linear, self).__init__()
-        self.Linear = nn.Linear(in_features, out_features, bias, device, dtype=torch.double)
+        self.Linear = nn.Linear(in_features=in_features,
+                                out_features=out_features, bias=bias,
+                                device=device, dtype=torch.double)
         self.name = name
-    
+
+    def reset_parameters(self):
+        self.Linear.reset_parameters()
+        self.Linear.bias.data.fill_(0)
+
     def forward(self, x):
         # print(f"My_Linear - X.shape: {x.shape}, name: {self.name}")
         x = self.Linear(x)
@@ -27,11 +33,19 @@ class My_Conv1d(nn.Module):
                  groups=1, bias=True, padding_mode='zeros',
                  device=None, dtype=None, name=None):
         super(My_Conv1d, self).__init__()
-        self.Conv1d = nn.Conv1d(in_features, out_features, kernel_size,
-                                stride, padding, dilation, groups, bias,
-                                padding_mode, device, dtype=torch.double)
+        self.Conv1d = nn.Conv1d(in_channels=in_features,
+                                out_channels=out_features,
+                                kernel_size=kernel_size,
+                                stride=stride, padding=padding,
+                                dilation=dilation, groups=groups, bias=bias,
+                                padding_mode=padding_mode, device=device, dtype=torch.double)
         self.name = name
-    
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.Conv1D.reset_parameters()
+        self.Conv1d.bias.data.fill_(0)
+
     def forward(self, x):
         # print(f"My_Conv1d - X.shape: {x.shape}, name: {self.name}")
         x = self.Conv1d(x)
@@ -110,9 +124,14 @@ class My_GRU(nn.Module):
                  num_layers=1, batch_first=True,
                  bidirectional=True, name=None):
         super(My_GRU, self).__init__()
-        self.GRU = nn.GRU(input_size, hidden_size, num_layers,
-                          batch_first, bidirectional, dtype=torch.double)
+        self.GRU = nn.GRU(input_size=input_size,
+                          hidden_size=hidden_size,
+                          num_layers=num_layers,
+                          batch_first=batch_first,
+                          bidirectional=bidirectional,
+                          dtype=torch.double)
         self.name = name
+        self.reset_parameters()
     # input_size:입력크기로 훈련 데이터셋의 칼럼 갯수
     # hidden_size: 은닉층의 뉴런 갯수
     # num_layers: GRU 계층의 갯수
@@ -125,6 +144,10 @@ class My_GRU(nn.Module):
     # outputs, hidden_state = gru(inputs)
     # print(outputs.shape, hidden_state.shape)
     # # torch.Size([1, 35, 32]) torch.Size([1, 1, 32])
+
+    def reset_parameters(self):
+        self.GRU.reset_parameters()
+        self.GRU.bias.data.fill_(0)
 
     def forward(self, x):
         # print(f"My_Gru - X.shape: {x.shape}, name: {self.name}")

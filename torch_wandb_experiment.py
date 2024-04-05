@@ -43,7 +43,7 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:3" if use_cuda else "cpu")
+device = torch.device("cuda:1" if use_cuda else "cpu")
 ##################################################
 
 ##### args
@@ -53,8 +53,10 @@ model_type = 'mlp'
 # model_type = 'time-hetnet'
 # model_type = 'hetnet'
 is_mask = True
+# is_mask = False
 
 user_list_type = 'single'
+# user_list_type = 'multi'
 
 loss_method = 'euclidean'
 loss_method = 'mse'
@@ -64,7 +66,7 @@ if model_type == "mlp":
     x_attribute = 9
     length = ArgumentMask.total_day * ArgumentMask.time_stamp
     y_timestep = ArgumentMask.output_day * ArgumentMask.time_stamp
-    hidden_layer = 5
+    hidden_layer = 7
     cell = 256
 
 else: #time-hetnet
@@ -91,8 +93,17 @@ args_patience = 1500000
 
 args_factor = 0.1
 
-train_size = 0.7
-validation_size = 0.2
+train_size = 0.9
+
+from data.geolife.gps_grid_map_creator import GPSGridMapCreator
+grid_len = 1
+min_max_location = pd.read_csv('min_max_location.csv')
+mapCreator = GPSGridMapCreator(grid_len) # 1m grid
+mapCreator.create_grid_map(min_lat=min_max_location['min_lat'][0],
+                           min_lon=min_max_location['min_lon'][0],
+                           max_lat=min_max_location['max_lat'][0],
+                           max_lon=min_max_location['max_lon'][0])
+print(f"grid_map created")
 ##################################################
 
 ##### dirs
@@ -132,24 +143,21 @@ print(f"user_list: {user_list}")
 
 ##### Train - Validation user list
 train_len       = (int)(len(user_list) * train_size)
-validation_len  = (int)(len(user_list) * validation_size)
 
 train_list      = user_list[0:train_len]
-validation_list = user_list[train_len:(train_len + validation_len)]
-test_list       = user_list[(train_len + validation_len):]
-
-train_list = user_list[2:3]
-validation_list = user_list[2:3]
-test_list       = user_list[2:3]
-
-num = 2
-train_list = user_list#[:-num]
-validation_list = user_list#[:-num]
-test_list = user_list#[:-num]
+test_list       = user_list[train_len:]
+#
+# train_list = user_list#[:-num]
+# validation_list = user_list#[:-num]
+# test_list = user_list#[:-num]
 
 # train_list = ['035']
 # validation_list = ['035']
 # test_list = ['035']
+#
+train_list = ['004']
+validation_list = ['004']
+test_list = ['004']
 ##################################################
 def write_configruation(conf_file):
     #--------Write Configration--------
@@ -192,7 +200,6 @@ def write_configruation(conf_file):
                                 'patience': [args_patience],
                                 'file_mode': [file_mode],
                                 'train_list': [train_list],
-                                'val_list': [validation_list],
                                 'test_list': [test_list],
                                 'write_dir': [writer_dir],
                                 'train_columns': [training_data.get_train_columns()]})
@@ -204,7 +211,6 @@ print(f"use_cuda: {use_cuda}, device: {device}")
 print(f"model_type: {model_type}")
 
 print(f"train: [{train_list}]")
-print(f"validation: [{validation_list}]")
 print(f"test: [{test_list}]")
 
 print("Building Network ...")
@@ -227,7 +233,6 @@ if model_type == 'mlp':
     test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
 else:
     # training_data           = SegmentDataset('train', user_list_type, data_dir, train_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
-    # validation_data         = SegmentDataset('test', user_list_type, data_dir, validation_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
     # test_data               = SegmentDataset('test', user_list_type, data_dir, test_list, device, day, day_divide, round_min, round_sec, y_timestep, length, label_attribute, sample_s, sample_q)
     from torch_trajectory_dataset import TrajectoryDataset
 
@@ -400,6 +405,7 @@ if is_train == True:
 
             loss_train += loss.item()
             loss.backward()
+            nn.utils.clip_grad_norm(model.parameters(), 1.0)
             optimizer.step()
 
         if epoch % 100 == 1:
@@ -416,10 +422,22 @@ if is_train == True:
                 output = model(X_val)
 
                 if model_type == 'mlp':
+                    # # reverse normalization
+                    # output[:, :, 0] = output[:, :, 0] * mapCreator.get_num_lat()
+                    # output[:, :, 1] = output[:, :, 1] * mapCreator.get_num_lon()
+                    # y_val[:, :, 1] = y_val[:, :, 1] * mapCreator.get_num_lat()
+                    # y_val[:, :, 2] = y_val[:, :, 2] * mapCreator.get_num_lon()
+
                     output = torch.concat([torch.unsqueeze(y_val[:, :, 0], -1), output], axis=-1)
                     val_loss = test_criterion(y_val[y_val[:, :, 0] == 1], output[output[:, :, 0] == 1])
                 else:
                     mask, y_true = y_val
+                    # # reverse normalization
+                    # output[:, :, :, 0] = output[:, :, :, 0] * mapCreator.get_num_lat()
+                    # output[:, :, :, 1] = output[:, :, :, 1] * mapCreator.get_num_lon()
+                    # y_true[:, :, :, 0] = y_true[:, :, :, 0] * mapCreator.get_num_lat()
+                    # y_true[:, :, :, 1] = y_true[:, :, :, 1] * mapCreator.get_num_lon()
+
                     output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
                     y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
                     val_loss = test_criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])
@@ -457,10 +475,23 @@ if is_train == True:
                     output = test_model(test_X)
 
                     if model_type == 'mlp':
+                        # reverse normalization
+                        output[:, :, 0] = output[:, :, 0] * mapCreator.get_num_lat()
+                        output[:, :, 1] = output[:, :, 1] * mapCreator.get_num_lon()
+                        test_y[:, :, 1] = test_y[:, :, 1] * mapCreator.get_num_lat()
+                        test_y[:, :, 2] = test_y[:, :, 2] * mapCreator.get_num_lon()
+
                         output = torch.concat([torch.unsqueeze(test_y[:, :, 0], -1), output], axis=-1)
                         dist = test_criterion(test_y[test_y[:, :, 0] == 1], output[output[:, :, 0] == 1])
                     else:
                         mask, y_true = test_y
+
+                        # reverse normalization
+                        output[:, :, :, 0] = output[:, :, :, 0] * mapCreator.get_num_lat()
+                        output[:, :, :, 1] = output[:, :, :, 1] * mapCreator.get_num_lon()
+                        y_true[:, :, :, 0] = y_true[:, :, :, 0] * mapCreator.get_num_lat()
+                        y_true[:, :, :, 1] = y_true[:, :, :, 1] * mapCreator.get_num_lon()
+
                         output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
                         y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
                         dist = test_criterion(y_true[y_true[:, :, :, 0] > 0.5], output[output[:, :, :, 0] > 0.5])

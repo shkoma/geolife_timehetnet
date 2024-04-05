@@ -125,7 +125,7 @@ class LocationPreprocessor():
         max_location += [max_lon]
         
         df = pd.DataFrame({'min_location':min_location,
-                        'max_location':max_location})
+                           'max_location':max_location})
         df.to_csv(self.min_max_file, index=False)
 
         return df
@@ -156,6 +156,7 @@ class LocationPreprocessor():
 
 ### Convert user's location(Coordinate)
 # locationPreprocessor = LocationPreprocessor()
+# locationPreprocessor.get_minmax_location(True)
 # valid_user_list = locationPreprocessor.get_valid_user_list()
 # for id in valid_user_list['valid_user_list']:
 #     print(f"user id: {id}")

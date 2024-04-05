@@ -75,14 +75,14 @@ for id in valid_user_list['valid_user_list']:
         group_column.append(group_number)
 
     user_df['group'] = group_column
-    user_df['year'] = user_df['datetime'].dt.year
-    user_df['month'] = user_df['datetime'].dt.month
+    # user_df['year'] = user_df['datetime'].dt.year
+    # user_df['month'] = user_df['datetime'].dt.month
     user_df['week'] = user_df['datetime'].dt.weekday
     user_df['week'] += 1
     user_df['hour'] = user_df['datetime'].dt.hour
     user_df['hour'] += 1
-    user_df['day'] = user_df['datetime'].dt.day
-    user_df['day'] += 1
+    # user_df['day'] = user_df['datetime'].dt.day
+    # user_df['day'] += 1
 
     user_df = user_df.drop(columns=['days', 'datetime', 'latitude', 'longitude', 'what', 'altitude', 'time_diff', 'prev_date'])
 
@@ -167,7 +167,7 @@ for id in valid_user_list['valid_user_list']:
     train_df = full_df.iloc[:train_size, :]
     test_df = full_df.loc[train_size:, :]
 
-    print(f"minimum_dist: {minimun_dist}, max_speed:{max_speed}")
+    print(f"minimum_dist: {minimun_dist}m, max_speed: {(max_speed * 2 * 60)//1000}km")
     print(f"slow count: {slow_count}, fast_count: {fast_count}")
     print(f"total: {full_df.shape[0] // (min_length * total_samples)}, {full_df.shape}")
     print(f"train: {train_df.shape[0] // (min_length * total_samples)}, {train_df.shape}")

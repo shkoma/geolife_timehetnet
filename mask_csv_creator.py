@@ -8,7 +8,6 @@ from torch_args import HetnetMask as args_hetnet
 import numpy as np
 import pandas as pd
 
-
 def getUserId(id):
     val = ""
     if id < 10:
@@ -23,9 +22,6 @@ def getUserId(id):
 
 locationPreprocessor = LocationPreprocessor('data/geolife/')
 valid_user_list = locationPreprocessor.get_valid_user_list()
-
-lat1, lon1 = 39.975300, 116.452488  # Lower-left corner
-lat2, lon2 = 41.367085, 122.651456  # Upper-right corner
 
 round_time = args.round_time
 output_csv = args.output_csv
@@ -45,16 +41,25 @@ local_folder = 'data/geolife/Data/'
 
 user_list = pd.read_csv('data/geolife/time_grid_sample.csv')
 user_list = user_list.loc[user_list['ratio'] >= 10, :]
-mode = 'time-hetnet'
+# mode = 'time-hetnet'
 mode = 'mlp'
 print(f"mode: {mode}")
 print(f"users: {user_list.shape[0]}, user_list: {user_list['user_id'].to_list()}")
-# for id in valid_user_list['valid_user_list']:
+
+from data.geolife.gps_grid_map_creator import GPSGridMapCreator
+grid_len = 1
+min_max_location = pd.read_csv('min_max_location.csv')
+mapCreator = GPSGridMapCreator(grid_len) # 1m grid
+mapCreator.create_grid_map(min_lat=min_max_location['min_lat'][0],
+                           min_lon=min_max_location['min_lon'][0],
+                           max_lat=min_max_location['max_lat'][0],
+                           max_lon=min_max_location['max_lon'][0])
+print(f"grid_map created")
 for id in user_list['user_id']:
-    # id = 4
+    id = 4
     print(f"user_id: {id}")
     user_id = locationPreprocessor.getUserId(id)
-    csv_file = local_folder + user_id + '/csv/' + user_id + '.csv'
+    csv_file = local_folder + user_id + '/csv/' + user_id + '_quantile.csv'
     output_file = local_folder + user_id + '/csv/' + user_id + output_csv
 
     train_file = local_folder + user_id + '/csv/' + user_id + train_csv
@@ -66,17 +71,25 @@ for id in user_list['user_id']:
 
     df = df.set_index('datetime').reset_index()
     user_df = df.groupby('datetime')[df.columns[1:].to_list()].mean().reset_index()
-    user_df = locationPreprocessor.convert_coord_for_blender_for_user(user_df)
+
+    # grid_row = 'grid_row_' + str(grid_len) + 'm'  # row
+    # grid_col = 'grid_col_' + str(grid_len) + 'm'  # column
+    grid_row = 'row'
+    grid_col = 'col'
+    user_df[grid_row], user_df[grid_col] = mapCreator.find_grid_number(user_df['latitude'], user_df['longitude'])
+    # user_df['grid_row'], user_df['grid_col'] = mapCreator.get_grid_form_normalization(user_df[grid_row], user_df[grid_col])
+    # X, Y
+    # user_df = locationPreprocessor.convert_coord_for_blender_for_user(user_df)
 
     user_df['datetime'] = pd.to_datetime(user_df['datetime'])
-    user_df['year'] = user_df['datetime'].dt.year
-    user_df['month'] = user_df['datetime'].dt.month
+    # user_df['year'] = user_df['datetime'].dt.year
+    # user_df['month'] = user_df['datetime'].dt.month
     user_df['week'] = user_df['datetime'].dt.weekday
     user_df['week'] += 1
     user_df['hour'] = user_df['datetime'].dt.hour
     user_df['hour'] += 1
-    user_df['day'] = user_df['datetime'].dt.day
-    user_df['day'] += 1
+    # user_df['day'] = user_df['datetime'].dt.day
+    # user_df['day'] += 1
 
     ## make data fully
     begin = user_df['datetime'][0]
@@ -91,8 +104,14 @@ for id in user_list['user_id']:
     user_df = pd.merge(date_df, user_df, how='outer', on='datetime')
     user_df = user_df.fillna(0)
     user_df['time_grid'] = np.arange(1, user_df.shape[0] + 1)
-    user_df['mask'] = np.where(user_df['x'] != 0, 1, 0)
+    user_df['time_grid'] = user_df['time_grid']/user_df['time_grid'].max()
+    user_df['mask'] = np.where(user_df['longitude'] != 0, 1, 0)
     user_df['date'] = user_df['datetime'].dt.date
+
+    # # print user_df
+    # user_df = user_df.drop(columns=['days', 'date', 'latitude', 'longitude', 'what', 'altitude'])
+    # user_df.to_csv('user_df.csv', index=False)
+    # break
 
     start_time = args.start_time
     finish_time = args.finish_time
@@ -125,7 +144,7 @@ for id in user_list['user_id']:
     if (full_df.shape[0] // divided_len) < 5:
         continue
 
-    if args.random == 'random':
+    if args.random == True:
         import random
         samples = np.arange(full_df.shape[0] // divided_len)
         print(f"samples: {len(samples)}")
@@ -140,9 +159,6 @@ for id in user_list['user_id']:
 
     full_df = full_df.drop(columns=['days', 'date', 'datetime', 'latitude', 'longitude', 'what', 'altitude'])
     full_df = full_df.set_index('mask').reset_index()
-    # full_df = pd.get_dummies(full_df, columns=['hour', 'week'], drop_first=True).astype(np.int64)
-
-
 
     print(f"time_stamp: {time_stamp}, total_day: {total_day}, sample length: {divided_len}")
     print(f"full_df: {full_df.shape}")
@@ -158,19 +174,22 @@ for id in user_list['user_id']:
     time_grid_list += [user_df.shape[0]]
     total_sample_list += [total_samples]
 
-    print(f'total sample: {total_samples}, {full_df.shape}')
-    print(f'train sample: {train_samples}, {train_df.shape}')
-    print(f'test sample: {test_df.shape[0] // divided_len}, {test_df.shape}')
+    # print(f'total sample: {total_samples}, {full_df.shape}')
+    # print(f'train sample: {train_samples}, {train_df.shape}')
+    # print(f'test sample: {test_df.shape[0] // divided_len}, {test_df.shape}')
 
     full_df.to_csv(output_file, index=False)
     train_df.to_csv(train_file, index=False)
     test_df.to_csv(test_file, index=False)
-    # break
+    # print(full_df)
+    print(full_df.max())
+    # print(full_df)
+    break
 
-time_df = pd.DataFrame({"user_id": user_id_list,
-                        "time_grid": time_grid_list,
-                        "ratio_60min": ratio,
-                        "total_samples": total_samples})
-#
-time_df.sort_values('total_samples', ascending=False)
-time_df.to_csv('mask_user_list.csv')
+# time_df = pd.DataFrame({"user_id": user_id_list,
+#                         "time_grid": time_grid_list,
+#                         "ratio_60min": ratio,
+#                         "total_samples": total_samples})
+# #
+# time_df.sort_values('total_samples', ascending=False)
+# time_df.to_csv('mask_user_list.csv')
