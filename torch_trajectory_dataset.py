@@ -7,7 +7,7 @@ from torch_args import ArgumentSet as args
 from torch_args import HetnetMask
 
 class TrajectoryDataset(Dataset):
-    def __init__(self, data_mode, user_list_type, data_dir, writer_dir, user_list, device, y_timestep, length, label_attribute, sample_s, sample_q, is_mask):
+    def __init__(self, data_mode, user_list_type, data_dir, writer_dir, user_list, device, y_timestep, length, label_attribute, sample_s, sample_q, is_mask, cur_list):
         self.data_mode = data_mode
         self.user_list_type = user_list_type
         self.data_dir = data_dir
@@ -22,6 +22,7 @@ class TrajectoryDataset(Dataset):
         self.columns = []
         self.full_user_data_list = [] # user together, min mode
         self.is_mask = is_mask
+        self.cur_list = cur_list
 
         if self.user_list_type == 'single':
             if self.data_mode == 'train':
@@ -41,27 +42,62 @@ class TrajectoryDataset(Dataset):
             else:
                 self.csv_file = args.output_csv
 
+        if self.cur_list != 'fold':
+            if self.data_mode == 'train':
+                self.csv_file = self.cur_list + '_train.csv'
+            elif self.data_mode == 'test':
+                self.csv_file = self.cur_list + '_test.csv'
+        else:
+            if self.data_mode == 'train':
+                self.csv_file = 'user_full_train.csv'
+            elif self.data_mode == 'test':
+                self.csv_file = 'user_full_test.csv'
+
         self.full_df = pd.DataFrame()
         self.loadUserData()
 
     def get_train_columns(self):
         return self.columns
 
+    def copyConfiguration(self, df):
+        copy_file = str(self.writer_dir) + '/' + self.csv_file
+        df.to_csv(copy_file, index=False)
+
+        if self.cur_list != 'fold':
+            train_user_list = pd.read_csv(self.cur_list + '_train_user_list.csv')
+            train_user_list.to_csv(str(self.writer_dir) + '/train_user_list.csv', index=False)
+
+            test_user_list = pd.read_csv(self.cur_list + '_test_user_list.csv')
+            test_user_list.to_csv(str(self.writer_dir) + '/test_user_list.csv', index=False)
+        else:
+            train_user_list = pd.read_csv('train_user_list.csv')
+            train_user_list.to_csv(str(self.writer_dir) + '/train_user_list.csv', index=False)
+
+            test_user_list = pd.read_csv('test_user_list.csv')
+            test_user_list.to_csv(str(self.writer_dir) + '/test_user_list.csv', index=False)
+
     def loadUserData(self):
-        for user_id in self.user_list:
-            # min
-            csv_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.csv_file
-            copy_file = str(self.writer_dir) + '/' + str(user_id) + self.csv_file
-            df = pd.read_csv(csv_file)
-            df.to_csv(copy_file, index=False)
+        # for user_id in self.user_list:
+        #     # min
+        #     csv_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.csv_file
+        #     copy_file = str(self.writer_dir) + '/' + str(user_id) + self.csv_file
+        #     df = pd.read_csv(csv_file)
+        #     df.to_csv(copy_file, index=False)
+        #
+        #     df_1 = df[df.columns[3:].to_list()].copy()
+        #     df_1 = pd.concat([df_1, df.iloc[:, 0:3]], axis=1)
+        #     self.full_df = pd.concat([self.full_df, df_1], axis=0).reset_index(drop=True).copy()
 
-            df_1 = df[df.columns[3:].to_list()].copy()
-            df_1 = pd.concat([df_1, df.iloc[:, 0:3]], axis=1)
-            self.full_df = pd.concat([self.full_df, df_1], axis=0).reset_index(drop=True).copy()
+        # self.full_df = pd.concat(
+        #     [pd.get_dummies(self.full_df.iloc[:, :-3], columns=['hour', 'week'], drop_first=True).astype(np.int64),
+        #      self.full_df.iloc[:, -3:]], axis=1)
+        df = pd.read_csv(self.csv_file)
+        self.copyConfiguration(df)
 
-        self.full_df = pd.concat(
-            [pd.get_dummies(self.full_df.iloc[:, :-3], columns=['hour', 'week'], drop_first=True).astype(np.int64),
-             self.full_df.iloc[:, -3:]], axis=1)
+        df_1 = df[df.columns[3:].to_list()].copy()
+        df_1 = pd.concat([df_1, df.iloc[:, 0:3]], axis=1)
+        self.full_df = pd.concat([self.full_df, df_1], axis=0).reset_index(drop=True).copy()
+
         self.columns = self.full_df.columns.to_list()
         self.sampleFullSet(self.full_df)
         return

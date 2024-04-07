@@ -447,7 +447,6 @@ for fold_idx in reversed(range(num_fold)):
     title_euclidean = str(fold_idx) + '_Euclidean Dist'
     # writer.add_scalar(title_euclidean, mean_dist, fold_idx)
     wandb.log({title_euclidean: mean_dist}, step=fold_idx)
-
     print(f"fold-{fold_idx}")
     print(f"Euclidean distance: {mean_dist}")
 

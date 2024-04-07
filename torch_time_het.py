@@ -14,13 +14,12 @@ class My_Linear(nn.Module):
     def __init__(self, in_features, out_features, bias=True, device=None, name=None):
         super(My_Linear, self).__init__()
         self.Linear = nn.Linear(in_features=in_features,
-                                out_features=out_features, bias=bias,
-                                device=device, dtype=torch.double)
+                                out_features=out_features, bias=bias, device=device, dtype=torch.double)
         self.name = name
 
     def reset_parameters(self):
         self.Linear.reset_parameters()
-        self.Linear.bias.data.fill_(0)
+        # self.Linear.bias.data.fill_(0)
 
     def forward(self, x):
         # print(f"My_Linear - X.shape: {x.shape}, name: {self.name}")
@@ -36,21 +35,20 @@ class My_Conv1d(nn.Module):
         self.Conv1d = nn.Conv1d(in_channels=in_features,
                                 out_channels=out_features,
                                 kernel_size=kernel_size,
-                                stride=stride, padding=padding,
-                                dilation=dilation, groups=groups, bias=bias,
+                                stride=stride, padding=padding, dilation=dilation,
+                                groups=groups, bias=bias,
                                 padding_mode=padding_mode, device=device, dtype=torch.double)
         self.name = name
-        self.reset_parameters()
+        # self.reset_parameters()
 
     def reset_parameters(self):
         self.Conv1D.reset_parameters()
-        self.Conv1d.bias.data.fill_(0)
 
     def forward(self, x):
         # print(f"My_Conv1d - X.shape: {x.shape}, name: {self.name}")
         x = self.Conv1d(x)
         return x
-    
+
 class ConvBlock(nn.Module):
     def __init__(self, dims=[32,32,1], 
                  input_shape=None,
@@ -121,14 +119,16 @@ class ConvBlock(nn.Module):
 
 class My_GRU(nn.Module):
     def __init__(self, input_size, hidden_size,
-                 num_layers=1, batch_first=True,
-                 bidirectional=True, name=None):
+                 num_layers=1, bias=True, batch_first=True, dropout=0,
+                 bidirectional=False, device=None, dtype=None, name=None):
         super(My_GRU, self).__init__()
         self.GRU = nn.GRU(input_size=input_size,
                           hidden_size=hidden_size,
                           num_layers=num_layers,
+                          bias=bias,
                           batch_first=batch_first,
-                          bidirectional=bidirectional,
+                          dropout=dropout,
+                          bidirectional=bidirectional, device=device,
                           dtype=torch.double)
         self.name = name
         self.reset_parameters()
@@ -147,7 +147,6 @@ class My_GRU(nn.Module):
 
     def reset_parameters(self):
         self.GRU.reset_parameters()
-        self.GRU.bias.data.fill_(0)
 
     def forward(self, x):
         # print(f"My_Gru - X.shape: {x.shape}, name: {self.name}")
@@ -162,8 +161,8 @@ class GruBlock(nn.Module):
         # input_shape - (batch, input_features)
         # input_size 는 input_features만 필요
         self.gru = My_GRU(input_size=input_shape[1],
-                          num_layers=len(dims),
                           hidden_size=dims[0],
+                          num_layers=len(dims),
                           name=f"{name}")
 
     def forward(self, inp):
@@ -215,9 +214,9 @@ def getSequential(dims=[32, 32, 1], name=None, activation=None,
 
 def getTimeBlock(block = 'conv', dims=[32, 32, 1], input_shape=None, activation=None, name=None, final=True, batchnorm=False, dilate=False, first_features=global_first_feature):
     if block == 'conv':
-        return ConvBlock(dims=dims,input_shape=input_shape,activation=activation,name=name,final=final,batchnorm=batchnorm,dilate=dilate, first_features=first_features)
+        return ConvBlock(dims=dims, input_shape=input_shape, activation=activation, name=name, final=final, batchnorm=batchnorm, dilate=dilate, first_features=first_features)
     elif block == 'gru':
-        return GruBlock(dims=dims,input_shape=input_shape,activation=activation,name=name,final=final)
+        return GruBlock(dims=dims, input_shape=input_shape, activation=activation, name=name, final=final)
     else:
         raise ValueError(f"Block type {block} not defined.")
     

@@ -2,6 +2,8 @@ import ast
 import os
 import pandas as pd
 import datetime
+
+import torch_args
 import wandb
 
 import torch
@@ -43,14 +45,15 @@ def make_Tensorboard_dir(dir_name, dir_format):
 
 ##### CUDA for PyTorch
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:1" if use_cuda else "cpu")
+device = torch.device("cuda:3" if use_cuda else "cpu")
 ##################################################
 
 ##### args
 args = argument_parser()
 
 model_type = 'mlp'
-# model_type = 'time-hetnet'
+model_type = 'time-hetnet'
+model_type = torch_args.global_model_type
 # model_type = 'hetnet'
 is_mask = True
 # is_mask = False
@@ -86,8 +89,7 @@ batch_size = ArgumentSet.batch_size
 
 args_early_stopping = True
 args_epoch = 1500000
-args_lr = 0.001
-
+args_lr = 0.0015
 # be careful to control args_patience, it can be stucked in a local minimum point.
 args_patience = 1500000
 
@@ -130,10 +132,14 @@ best_train_model = 'best_train_model.pth'
 ##### Time grid User list
 # time_grid_csv = 'data/geolife/time_grid_sample.csv'
 if is_mask == True:
-    time_grid_csv = 'mask_user_list.csv'
+    # time_grid_csv = 'mask_user_list.csv'
+    time_grid_csv = 'full_user_list.csv'
+    user_df = pd.read_csv(time_grid_csv)
+    # user_df = user_df.loc[user_df['ratio'] >= 10, :]
 else:
     time_grid_csv = 'walk_speed_sample_user_list.csv'
-user_df = pd.read_csv(time_grid_csv)
+    user_df = pd.read_csv(time_grid_csv)
+
 locationPreprocessor = LocationPreprocessor('data/geolife/')
 user_list = []
 for user in user_df['user_id'].to_list():
@@ -147,17 +153,19 @@ train_len       = (int)(len(user_list) * train_size)
 train_list      = user_list[0:train_len]
 test_list       = user_list[train_len:]
 #
-# train_list = user_list#[:-num]
-# validation_list = user_list#[:-num]
-# test_list = user_list#[:-num]
+
+
+train_list = user_list#[:-num]
+test_list = user_list#[:-num]
+
+train_list = pd.read_csv('train_user_list.csv')['user_id'].to_list()
+test_list = pd.read_csv('test_user_list.csv')['user_id'].to_list()
 
 # train_list = ['035']
-# validation_list = ['035']
 # test_list = ['035']
 #
-train_list = ['004']
-validation_list = ['004']
-test_list = ['004']
+# train_list = ['004']
+# test_list = ['004']
 ##################################################
 def write_configruation(conf_file):
     #--------Write Configration--------
@@ -247,7 +255,8 @@ else:
                                         label_attribute=label_attribute, 
                                         sample_s=sample_s, 
                                         sample_q=sample_q,
-                                        is_mask=is_mask)
+                                        is_mask=is_mask,
+                                        cur_list='fold')
     test_data = TrajectoryDataset(data_mode='test',
                                         user_list_type=user_list_type, 
                                         data_dir=data_dir,
@@ -259,7 +268,8 @@ else:
                                         label_attribute=label_attribute, 
                                         sample_s=sample_s, 
                                         sample_q=sample_q,
-                                        is_mask=is_mask)
+                                        is_mask=is_mask,
+                                        cur_list='fold')
     train_dataloader        = DataLoader(training_data, batch_size, shuffle=False)
     test_dataloader         = DataLoader(test_data, batch_size, shuffle=False)
 
@@ -301,6 +311,8 @@ if is_train == True:
             'support_set': sample_s,
             'train_list': train_list,
             'test_list': test_list,
+            'start_time': ArgumentMask.start_time,
+            'finish_time': ArgumentMask.finish_time,
             'train_len':len(train_dataloader.dataset),
             'test_len': len(test_dataloader.dataset),
             'write_dir': writer_dir,
@@ -383,6 +395,7 @@ if is_train == True:
     model = model.to(torch.double)
     model = model.to(device)
 
+    each_time = 50
     for epoch in range(args_epoch):
         print(f"epoch: {epoch}")
 
@@ -408,7 +421,7 @@ if is_train == True:
             nn.utils.clip_grad_norm(model.parameters(), 1.0)
             optimizer.step()
 
-        if epoch % 100 == 1:
+        if epoch % each_time == 1:
             wandb.log({'training loss':loss_train}, step=epoch)
 
         model.eval()
@@ -422,21 +435,24 @@ if is_train == True:
                 output = model(X_val)
 
                 if model_type == 'mlp':
-                    # # reverse normalization
-                    # output[:, :, 0] = output[:, :, 0] * mapCreator.get_num_lat()
-                    # output[:, :, 1] = output[:, :, 1] * mapCreator.get_num_lon()
-                    # y_val[:, :, 1] = y_val[:, :, 1] * mapCreator.get_num_lat()
-                    # y_val[:, :, 2] = y_val[:, :, 2] * mapCreator.get_num_lon()
+                    y_true = y_val
 
-                    output = torch.concat([torch.unsqueeze(y_val[:, :, 0], -1), output], axis=-1)
-                    val_loss = test_criterion(y_val[y_val[:, :, 0] == 1], output[output[:, :, 0] == 1])
+                    # reverse normalization
+                    output[:, :, 0] = output[:, :, 0] * mapCreator.get_num_lat()
+                    output[:, :, 1] = output[:, :, 1] * mapCreator.get_num_lon()
+                    y_true[:, :, 1] = y_true[:, :, 1] * mapCreator.get_num_lat()
+                    y_true[:, :, 2] = y_true[:, :, 2] * mapCreator.get_num_lon()
+
+                    output = torch.concat([torch.unsqueeze(y_true[:, :, 0], -1), output], axis=-1)
+                    val_loss = test_criterion(y_true[y_true[:, :, 0] == 1], output[output[:, :, 0] == 1])
                 else:
                     mask, y_true = y_val
-                    # # reverse normalization
-                    # output[:, :, :, 0] = output[:, :, :, 0] * mapCreator.get_num_lat()
-                    # output[:, :, :, 1] = output[:, :, :, 1] * mapCreator.get_num_lon()
-                    # y_true[:, :, :, 0] = y_true[:, :, :, 0] * mapCreator.get_num_lat()
-                    # y_true[:, :, :, 1] = y_true[:, :, :, 1] * mapCreator.get_num_lon()
+
+                    # reverse normalization
+                    output[:, :, :, 0] = output[:, :, :, 0] * mapCreator.get_num_lat()
+                    output[:, :, :, 1] = output[:, :, :, 1] * mapCreator.get_num_lon()
+                    y_true[:, :, :, 0] = y_true[:, :, :, 0] * mapCreator.get_num_lat()
+                    y_true[:, :, :, 1] = y_true[:, :, :, 1] * mapCreator.get_num_lon()
 
                     output = torch.cat([mask[:, :, :].unsqueeze(-1), output], axis=-1)
                     y_true = torch.cat([mask[:, :, :].unsqueeze(-1), y_true], axis=-1)
@@ -444,7 +460,7 @@ if is_train == True:
 
                 loss_val += val_loss.item()
 
-            if epoch % 100 == 1:
+            if epoch % each_time == 1:
                 wandb.log({'validation loss':loss_val}, step=epoch)
             print(f"train loss: {loss_train}, validation loss: {loss_val}")
             lr_scheduler.step(loss_val)
@@ -463,7 +479,7 @@ if is_train == True:
             torch.save(model.state_dict(), best_train_model)
 
         # Test mode
-        if epoch % 100 == 1:
+        if epoch % each_time == 1:
             test_model.load_state_dict(torch.load(best_model_path))
             test_model = test_model.to(device)
             test_model.eval()

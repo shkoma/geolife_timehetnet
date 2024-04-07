@@ -3,7 +3,10 @@ import pandas as pd
 
 
 global_random = True
-global_batch_size = 2000
+global_batch_size = 1500
+# global_model_type = 'mlp'
+global_model_type = 'time-hetnet'
+
 class ArgumentSet:
     gap = 30
     round_min = str(gap) + 'min'
@@ -33,10 +36,10 @@ class ArgumentMask:
     round_time = round_min
 
     ## Specific Time Grid
-    start_time = pd.to_datetime('06:00:00').time()
-    finish_time = pd.to_datetime('12:00:00').time()
+    start_time = pd.to_datetime('00:00:00').time()
+    finish_time = pd.to_datetime('23:00:00').time()
     time_stamp = finish_time.hour - start_time.hour + 1
-    input_day = 2
+    input_day = 3
     output_day = 1
     total_day = input_day + output_day
 
@@ -54,8 +57,8 @@ class ArgumentMask:
     test_csv = '_mask_test_output_' + round_time + '.csv'
 
 class HetnetMask(ArgumentMask):
-    sample_s = 2
+    sample_s = 1
     sample_q = 1
     total_sample = sample_s + sample_q
-    length = ArgumentMask.total_day * ArgumentMask.time_stamp
+    length = ArgumentMask.input_day*24 + ArgumentMask.output_day*ArgumentMask.time_stamp#ArgumentMask.total_day * ArgumentMask.time_stamp
     y_timestep = ArgumentMask.output_day * ArgumentMask.time_stamp

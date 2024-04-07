@@ -26,22 +26,46 @@ class MlpDataset(Dataset):
         else:
             self.csv_file = ArgumentMask.output_csv
 
-        for user_id in self.user_list:
-            self.min_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.csv_file
-            copy_file = str(self.writer_dir) + '/' + str(user_id) + self.csv_file
-            df = pd.read_csv(self.min_file)
-            df.to_csv(copy_file, index=False)
+        if self.data_mode == 'train':
+            self.csv_file = 'user_full_train.csv'
+        elif self.data_mode == 'test':
+            self.csv_file = 'user_full_test.csv'
 
-            df = df.set_index('mask').reset_index()
-            df_1 = df[df.columns[3:].to_list()].copy()
-            df_1 = pd.concat([df_1, df.iloc[:, 0:3]], axis=1)  # mask, x, y
-            self.columns = df_1.columns.to_list()
-            self.full_df = pd.concat([self.full_df, df_1], axis=0).reset_index(drop=True).copy()
 
-        self.full_df = pd.concat([pd.get_dummies(self.full_df.iloc[:, :-3], columns=['hour', 'week'], drop_first=True).astype(np.int64), self.full_df.iloc[:, -3:]], axis=1)
+        # for user_id in self.user_list:
+        #     self.min_file = str(self.data_dir) + str(user_id) + '/csv/' + str(user_id) + self.csv_file
+        #     copy_file = str(self.writer_dir) + '/' + str(user_id) + self.csv_file
+        #     df = pd.read_csv(self.min_file)
+        #     df.to_csv(copy_file, index=False)
+        #
+        #     df = df.set_index('mask').reset_index()
+        #     df_1 = df[df.columns[3:].to_list()].copy()
+        #     df_1 = pd.concat([df_1, df.iloc[:, 0:3]], axis=1)  # mask, x, y
+        #     self.columns = df_1.columns.to_list()
+        #     self.full_df = pd.concat([self.full_df, df_1], axis=0).reset_index(drop=True).copy()
+
+        df = pd.read_csv(self.csv_file)
+        self.copyConfiguration(df)
+
+        df = df.set_index('mask').reset_index()
+        df_1 = df[df.columns[3:].to_list()].copy()
+        df_1 = pd.concat([df_1, df.iloc[:, 0:3]], axis=1)  # mask, x, y
+        self.columns = df_1.columns.to_list()
+        self.full_df = pd.concat([self.full_df, df_1], axis=0).reset_index(drop=True).copy()
+
         self.x_attibutes = len(self.full_df.columns)
         self.sampleSet(self.full_df)
         self.samples = np.array(self.samples)
+
+    def copyConfiguration(self, df):
+        copy_file = str(self.writer_dir) + '/' + self.csv_file
+        df.to_csv(copy_file, index=False)
+
+        train_user_list = pd.read_csv('train_user_list.csv')
+        train_user_list.to_csv(str(self.writer_dir) + '/train_user_list.csv', index=False)
+
+        test_user_list = pd.read_csv('test_user_list.csv')
+        test_user_list.to_csv(str(self.writer_dir) + '/test_user_list.csv', index=False)
 
     def get_x_attibutes(self):
         return self.x_attibutes
